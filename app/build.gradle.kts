@@ -66,4 +66,7 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    // Java Native Access for UniFFI library
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
 }
