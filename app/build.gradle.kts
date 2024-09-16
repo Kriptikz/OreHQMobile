@@ -71,4 +71,11 @@ dependencies {
 
     // Java Native Access for UniFFI library
     implementation("net.java.dev.jna:jna:5.13.0@aar")
+
+    // Ktor client dependencies
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.websockets)
+    implementation(libs.ktor.client.serialization)
+    implementation(libs.ktor.client.logging)
 }

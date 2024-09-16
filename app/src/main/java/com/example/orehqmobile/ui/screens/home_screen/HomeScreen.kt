@@ -23,6 +23,7 @@ fun HomeScreen(
     onIncreaseSelectedThreads: () -> Unit,
     onDecreaseSelectedThreads: () -> Unit,
     onRunBenchmark: () -> Unit,
+    onFetchTimestamp: () -> Unit,
 ) {
     OreHQMobileScaffold(title = "Home") {
         val hashrate = homeUiState.hashRate
@@ -68,6 +69,10 @@ fun HomeScreen(
             ) {
                 Text("Run Benchmark")
             }
+
+            Button(onClick = onFetchTimestamp, modifier = Modifier.fillMaxWidth()) {
+                Text("Fetch Timestamp")
+            }
         }
     }
 }
@@ -86,6 +91,7 @@ fun HomeScreenPreview() {
             onDecreaseSelectedThreads = {},
             onIncreaseSelectedThreads = {},
             onRunBenchmark = {},
+            onFetchTimestamp = {},
         )
     }
 }

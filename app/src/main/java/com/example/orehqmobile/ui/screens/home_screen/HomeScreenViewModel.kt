@@ -1,5 +1,6 @@
 package com.example.orehqmobile.ui.screens.home_screen
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.orehqmobile.OreHQMobileApplication
+import com.example.orehqmobile.data.repositories.IPoolRepository
 import com.example.orehqmobile.data.repositories.ISolanaRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -25,7 +27,8 @@ data class HomeUiState(
 
 class HomeScreenViewModel(
     application: OreHQMobileApplication,
-    private val solanaRepository: ISolanaRepository
+    private val solanaRepository: ISolanaRepository,
+    private val poolRepository: IPoolRepository
 ) : ViewModel() {
     var homeUiState: HomeUiState by mutableStateOf(
         HomeUiState(
@@ -53,6 +56,24 @@ class HomeScreenViewModel(
     fun increaseSelectedThreads() {
         if (homeUiState.selectedThreads < homeUiState.availableThreads) {
             homeUiState = homeUiState.copy(selectedThreads = homeUiState.selectedThreads + 1)
+        }
+    }
+
+    fun fetchTimestamp() {
+        viewModelScope.launch {
+            try {
+                val result = poolRepository.fetchTimestamp()
+                result.fold(
+                    onSuccess = { timestamp ->
+                        Log.d("HomeScreenViewModel", "Fetched timestamp: $timestamp")
+                    },
+                    onFailure = { error ->
+                        Log.e("HomeScreenViewModel", "Error fetching timestamp", error)
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("HomeScreenViewModel", "Unexpected error", e)
+            }
         }
     }
 
@@ -97,9 +118,11 @@ class HomeScreenViewModel(
                 val application =
                     (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as OreHQMobileApplication)
                 val solanaRepository = application.container.solanaRepository
+                val poolRepository = application.container.poolRepository
                 HomeScreenViewModel(
                     application = application,
                     solanaRepository = solanaRepository,
+                    poolRepository = poolRepository,
                 )
             }
         }
