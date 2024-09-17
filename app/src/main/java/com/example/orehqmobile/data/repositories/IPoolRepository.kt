@@ -138,3 +138,11 @@ fun UByteArray.toULong(): ULong = this.foldIndexed(0UL) { index, acc, byte ->
     acc or (byte.toULong() shl (index * 8))
 }
 
+private fun List<UByte>.toUByteArray(): UByteArray {
+    return UByteArray(size) { this[it] }
+}
+
+fun ULong.toLittleEndianUByteArray(): UByteArray {
+    return UByteArray(8) { i -> ((this shr (8 * i)) and 0xFFU).toUByte() }
+}
+

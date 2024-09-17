@@ -27,6 +27,7 @@ import kotlinx.coroutines.withContext
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
+import uniffi.drillxmobile.DxSolution
 import java.security.KeyPair
 
 data class HomeUiState(
@@ -166,6 +167,41 @@ class HomeScreenViewModel(
       }
   }
 
+    private fun sendSubmissionMessage(submission: DxSolution) {
+        viewModelScope.launch {
+            try {
+                val bestHashBin = submission.digest.toUByteArray()
+                val bestNonceBin = submission.nonce.toUByteArray()
+
+                val hashNonceMessage = UByteArray(24)
+                bestHashBin.copyInto(hashNonceMessage, 0, 0, 16)
+                bestNonceBin.copyInto(hashNonceMessage, 16, 0, 8)
+
+                val signature = solanaRepository.signMessage(hashNonceMessage.toByteArray(), listOf(keypair!!)).signature
+                val publicKey = (keypair!!.public as Ed25519PublicKeyParameters).encoded
+
+                // Convert signature to Base58 string
+                val signatureBase58 = Base58.encodeToString(signature)
+
+                val binData = ByteArray(57 + signatureBase58.toByteArray().size).apply {
+                    this[0] = 2 // BestSolution Message
+                    System.arraycopy(bestHashBin.toByteArray(), 0, this, 1, 16)
+                    System.arraycopy(bestNonceBin.toByteArray(), 0, this, 17, 8)
+                    System.arraycopy(publicKey, 0, this, 25, 32)
+                    System.arraycopy(signatureBase58.toByteArray(), 0, this, 57, signatureBase58.toByteArray().size)
+                }
+
+                poolRepository.sendWebSocketMessage(binData)
+                Log.d("HomeScreenViewModel", "Sent BestSolution message")
+            } catch (e: Exception) {
+                Log.e("HomeScreenViewModel", "Error sending BestSolution message", e)
+            }
+        }
+    }
+
+//    private fun UByteArray.toByteArray(): ByteArray = ByteArray(size) { this[it].toByte() }
+//    private fun List<UByte>.toUByteArray(): UByteArray = UByteArray(size) { this[it] }
+
     fun decreaseSelectedThreads() {
         if (homeUiState.selectedThreads > 1) {
             homeUiState = homeUiState.copy(selectedThreads = homeUiState.selectedThreads - 1)
@@ -199,6 +235,47 @@ class HomeScreenViewModel(
     private fun handleStartMining(startMining: ServerMessage.StartMining) {
         Log.d("HomeScreenViewModel", "Received StartMining: hash=${Base64.encodeToString(startMining.challenge.toByteArray())}, " +
             "nonceRange=${startMining.nonceRange}, cutoff=${startMining.cutoff}")
+        // Launch a coroutine for heavy computation in the background
+        viewModelScope.launch(Dispatchers.Default) { // Use Dispatchers.Default for CPU-bound work
+            try {
+                val challenge: List<UByte> = startMining.challenge.toList()
+                val startTime = System.nanoTime()
+                val maxCutoff = 10uL
+                val cutoff = minOf(startMining.cutoff, maxCutoff)
+                val jobs = List(homeUiState.selectedThreads) {
+                    async {
+                        uniffi.drillxmobile.dxHash(challenge, cutoff, 0uL, 10000uL)
+                    }
+                }
+                val results = jobs.awaitAll()
+                val endTime = System.nanoTime()
+
+                val bestResult = results.maxByOrNull { it.difficulty }
+                val totalNoncesChecked = results.sumOf { it.noncesChecked }
+                val elapsedTimeSeconds = (endTime - startTime) / 1_000_000_000.0
+                val newHashrate = totalNoncesChecked.toDouble() / elapsedTimeSeconds
+
+                bestResult?.let { solution ->
+                    Log.d("HomeScreenViewModel", "Send submission with diff: ${solution.difficulty}")
+                    sendSubmissionMessage(solution)
+                }
+
+                sendReadyMessage()
+
+                withContext(Dispatchers.Main) {
+                    homeUiState = homeUiState.copy(
+                        hashRate = newHashrate,
+                        difficulty = bestResult?.difficulty ?: 0u
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+//                    hashrate = "Error: ${e.message}"
+//                    difficulty = "Error occurred"
+                }
+            }
+        }
     }
 
     fun mine() {
@@ -219,6 +296,13 @@ class HomeScreenViewModel(
                 val totalNoncesChecked = results.sumOf { it.noncesChecked }
                 val elapsedTimeSeconds = (endTime - startTime) / 1_000_000_000.0
                 val newHashrate = totalNoncesChecked.toDouble() / elapsedTimeSeconds
+
+                bestResult?.let { solution ->
+                    Log.d("HomeScreenViewModel", "Send submission with diff: ${solution.difficulty}")
+                    sendSubmissionMessage(solution)
+                }
+
+                sendReadyMessage()
 
                 withContext(Dispatchers.Main) {
                     homeUiState = homeUiState.copy(
