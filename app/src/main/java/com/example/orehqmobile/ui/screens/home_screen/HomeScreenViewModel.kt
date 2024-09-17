@@ -79,7 +79,8 @@ class HomeScreenViewModel(
                         // Connect to WebSocket
                         viewModelScope.launch {
                             try {
-                                poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), Base58.encodeToString(publicKey)).collect { data ->
+                                poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), Base58.encodeToString(publicKey)
+                                ) { sendReadyMessage() }.collect { data ->
                                     // Handle incoming WebSocket data
                                     Log.d("HomeScreenViewModel", "Received WebSocket data: ${data.toHexString()}")
                                     // Process the data as needed
@@ -137,6 +138,29 @@ class HomeScreenViewModel(
 //
 //        Log.d("HomeScreenViewModel", "Keypair JSON: $keyPairJson")
     }
+
+    private fun sendReadyMessage() {
+      viewModelScope.launch {
+          try {
+              val now = System.currentTimeMillis() / 1000 // Current time in seconds
+              val msg = now.toLittleEndianByteArray()
+              val sig = solanaRepository.signMessage(msg, listOf(keypair!!)).signature
+              val publicKey = (keypair!!.public as Ed25519PublicKeyParameters).encoded
+
+              val binData = ByteArray(1 + 32 + 8 + sig.size).apply {
+                  this[0] = 0 // Ready message type
+                  System.arraycopy(publicKey, 0, this, 1, 32)
+                  System.arraycopy(msg, 0, this, 33, 8)
+                  System.arraycopy(sig, 0, this, 41, sig.size)
+              }
+
+              poolRepository.sendWebSocketMessage(binData)
+              Log.d("HomeScreenViewModel", "Sent Ready message")
+          } catch (e: Exception) {
+              Log.e("HomeScreenViewModel", "Error sending Ready message", e)
+          }
+      }
+  }
 
     fun decreaseSelectedThreads() {
         if (homeUiState.selectedThreads > 1) {

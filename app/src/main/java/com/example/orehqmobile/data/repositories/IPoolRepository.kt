@@ -1,7 +1,9 @@
 package com.example.orehqmobile.data.repositories
 
+import android.util.Log
 import com.funkatronics.encoders.Base64
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.ws
 import io.ktor.client.plugins.websocket.wss
@@ -14,31 +16,42 @@ import io.ktor.http.HttpMethod
 import io.ktor.utils.io.errors.IOException
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readBytes
+import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import java.util.UUID
 
 interface IPoolRepository {
-    suspend fun connectWebSocket(timestamp: ULong, signature: String, publicKey: String): Flow<ByteArray>
+    suspend fun connectWebSocket(timestamp: ULong, signature: String, publicKey: String, sendReadyMessage: () -> Unit): Flow<ByteArray>
     suspend fun fetchTimestamp(): Result<ULong>
+    suspend fun sendWebSocketMessage(message: ByteArray) 
 }
 
 class PoolRepository: IPoolRepository {
     private val client = HttpClient {
-        install(WebSockets)
+        install(WebSockets) {
+            pingInterval = 500
+        }
     }
 
-    override suspend fun connectWebSocket(timestamp: ULong, signature: String, publicKey: String): Flow<ByteArray> = flow {
+    private var webSocketSession: DefaultClientWebSocketSession? = null
+
+    override suspend fun connectWebSocket(timestamp: ULong, signature: String, publicKey: String, sendReadyMessage: () -> Unit): Flow<ByteArray> = flow {
       val auth = Base64.getEncoder().encodeToString("${publicKey}:${signature}".toByteArray())
       
       client.wss(
-          urlString = "wss://ec1ipse.me?timestamp=$timestamp",
+          urlString = "wss://domainexpansion.tech?timestamp=$timestamp",
           request = {
-              header(HttpHeaders.Host, "ec1ipse.me")
+              header(HttpHeaders.Host, "domainexpansion.tech")
               header(HttpHeaders.Authorization, "Basic $auth")
           }
       ) {
+          webSocketSession = this
+          sendReadyMessage()
           for (frame in incoming) {
+              if (frame is Frame.Text) {
+                  Log.d("PoolRepository", "Got Text: ${frame.readText()}")
+              }
               if (frame is Frame.Binary) {
                   emit(frame.readBytes())
               }
@@ -59,6 +72,11 @@ class PoolRepository: IPoolRepository {
         }
     }
 
+    override suspend fun sendWebSocketMessage(message: ByteArray) {
+        webSocketSession?.send(Frame.Binary(true, message))
+            ?: throw IllegalStateException("WebSocket session not initialized")
+    }
+
     private fun generateWebSocketKey(): String {
         return Base64.getEncoder().encodeToString(UUID.randomUUID().toString().take(16).toByteArray())
     }
@@ -66,6 +84,10 @@ class PoolRepository: IPoolRepository {
 
 public fun ULong.toLittleEndianByteArray(): ByteArray {
   return ByteArray(8) { i -> (this shr (8 * i)).toByte() }
+}
+
+fun Long.toLittleEndianByteArray(): ByteArray {
+  return ByteArray(8) { i -> (this shr (8 * i) and 0xFFL).toByte() }
 }
 
 // Helper extension function to convert ByteArray to hex string
