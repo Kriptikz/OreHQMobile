@@ -14,11 +14,18 @@ import com.example.orehqmobile.data.repositories.IKeypairRepository
 import com.example.orehqmobile.data.repositories.IPoolRepository
 import com.example.orehqmobile.data.repositories.ISolanaRepository
 import com.example.orehqmobile.data.models.Ed25519PublicKey
+import com.example.orehqmobile.data.repositories.toLittleEndianByteArray
+import com.funkatronics.encoders.Base58
+import com.funkatronics.encoders.Base64
+import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair
+import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import java.security.KeyPair
 
 data class HomeUiState(
@@ -28,13 +35,14 @@ data class HomeUiState(
     var selectedThreads: Int,
 )
 
+@OptIn(ExperimentalStdlibApi::class)
 class HomeScreenViewModel(
     application: OreHQMobileApplication,
     private val solanaRepository: ISolanaRepository,
     private val poolRepository: IPoolRepository,
     private val keypairRepository: IKeypairRepository,
 ) : ViewModel() {
-    private var keypair: KeyPair? = null
+    private var keypair: AsymmetricCipherKeyPair? = null
     var homeUiState: HomeUiState by mutableStateOf(
         HomeUiState(
             availableThreads = 1,
@@ -52,20 +60,82 @@ class HomeScreenViewModel(
         }
 
         viewModelScope.launch {
+            // load keypair
             loadOrGenerateKeypair()
+
+            try {
+                val result = poolRepository.fetchTimestamp()
+                result.fold(
+                    onSuccess = { timestamp ->
+                        Log.d("HomeScreenViewModel", "Fetched timestamp: $timestamp")
+                        val tsBytes = timestamp.toLittleEndianByteArray()
+                        val signatureResult = solanaRepository.signMessage(tsBytes, listOf(keypair!!))
+
+                        val sig = signatureResult.signature
+                        val publicKey = (keypair!!.public as Ed25519PublicKeyParameters).encoded
+
+                        val privateKey = (keypair!!.private as Ed25519PrivateKeyParameters).encoded
+
+                        // Connect to WebSocket
+                        viewModelScope.launch {
+                            try {
+                                poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), Base58.encodeToString(publicKey)).collect { data ->
+                                    // Handle incoming WebSocket data
+                                    Log.d("HomeScreenViewModel", "Received WebSocket data: ${data.toHexString()}")
+                                    // Process the data as needed
+                                }
+                            } catch (e: Exception) {
+                                Log.e("HomeScreenViewModel", "WebSocket error: ${e.message}")
+                                when (e) {
+                                    is io.ktor.client.plugins.ClientRequestException -> {
+                                        val errorBody = e.response.bodyAsText()
+                                        Log.e("HomeScreenViewModel", "Error body: $errorBody")
+                                    }
+                                    is io.ktor.client.plugins.ServerResponseException -> {
+                                        val errorBody = e.response.bodyAsText()
+                                        Log.e("HomeScreenViewModel", "Error body: $errorBody")
+                                    }
+                                    else -> {
+                                        Log.e("HomeScreenViewModel", "Unexpected error", e)
+                                    }
+                                }
+                            }
+                        }
+
+
+                    },
+                    onFailure = { error ->
+                        Log.e("HomeScreenViewModel", "Error fetching timestamp", error)
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e("HomeScreenViewModel", "Unexpected error", e)
+            }
+
+
         }
     }
+    
 
     private suspend fun loadOrGenerateKeypair() {
         val password = "password"
-        keypair = keypairRepository.loadEncryptedKeypair(password)
-        if (keypair == null) {
-            keypair = keypairRepository.generateNewKeypair()
-            keypairRepository.saveEncryptedKeypair(keypair!!, password)
+        var loadedKeypair = keypairRepository.loadEncryptedKeypair(password)
+        if (loadedKeypair == null) {
+            loadedKeypair = keypairRepository.generateNewKeypair()
+            keypairRepository.saveEncryptedKeypair(loadedKeypair!!, password)
         }
 
-        val publicKey = keypair?.public as? Ed25519PublicKey
-        Log.d("HomeScreenViewModel", "Keypair public key: $publicKey")
+        val publicKey = loadedKeypair.public as Ed25519PublicKey
+        Log.d("HomeScreenViewModel", "Public key: $publicKey")
+
+        val privateKey = Ed25519PrivateKeyParameters(loadedKeypair.private.encoded, 0)
+        keypair = AsymmetricCipherKeyPair(privateKey.generatePublicKey(), privateKey)
+
+//        val keyPairJson = """
+//        [${privateKey.encoded.map { it.toUByte().toInt() }.joinToString(",")},${publicKey.encoded.map { it.toUByte().toInt() }.joinToString(",")}]
+//        """.trimIndent()
+//
+//        Log.d("HomeScreenViewModel", "Keypair JSON: $keyPairJson")
     }
 
     fun decreaseSelectedThreads() {

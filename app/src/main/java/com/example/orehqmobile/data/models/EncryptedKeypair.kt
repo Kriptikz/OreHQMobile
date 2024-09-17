@@ -1,6 +1,7 @@
 package com.example.orehqmobile.data.models
 
 import com.funkatronics.encoders.Base58
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 import org.bouncycastle.crypto.generators.SCrypt
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
@@ -72,7 +73,7 @@ class Ed25519PublicKey(private val keyBytes: ByteArray) : PublicKey {
     override fun getEncoded(): ByteArray = keyBytes
 
     override fun toString(): String {
-      return "${Base58.encodeToString(keyBytes)}"
+      return Base58.encodeToString(keyBytes)
   }
 }
 
