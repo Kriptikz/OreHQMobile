@@ -78,4 +78,14 @@ dependencies {
     implementation(libs.ktor.client.websockets)
     implementation(libs.ktor.client.serialization)
     implementation(libs.ktor.client.logging)
+
+    // Solana Dependencies
+    implementation("com.solanamobile:mobile-wallet-adapter-clientlib-ktx:2.0.3")
+    implementation("com.solanamobile:web3-solana:0.2.5")
+    implementation("com.solanamobile:rpc-core:0.2.7")
+    implementation("io.github.funkatronics:multimult:0.2.3")
+
+    // Solana Keypair Dependencies
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("org.bouncycastle:bcprov-jdk15on:1.68")
 }

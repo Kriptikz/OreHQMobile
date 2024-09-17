@@ -10,13 +10,16 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.orehqmobile.OreHQMobileApplication
+import com.example.orehqmobile.data.repositories.IKeypairRepository
 import com.example.orehqmobile.data.repositories.IPoolRepository
 import com.example.orehqmobile.data.repositories.ISolanaRepository
+import com.example.orehqmobile.data.models.Ed25519PublicKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.security.KeyPair
 
 data class HomeUiState(
     var availableThreads: Int,
@@ -28,8 +31,10 @@ data class HomeUiState(
 class HomeScreenViewModel(
     application: OreHQMobileApplication,
     private val solanaRepository: ISolanaRepository,
-    private val poolRepository: IPoolRepository
+    private val poolRepository: IPoolRepository,
+    private val keypairRepository: IKeypairRepository,
 ) : ViewModel() {
+    private var keypair: KeyPair? = null
     var homeUiState: HomeUiState by mutableStateOf(
         HomeUiState(
             availableThreads = 1,
@@ -45,6 +50,22 @@ class HomeScreenViewModel(
             val runtimeAvailableThreads = Runtime.getRuntime().availableProcessors()
             homeUiState = homeUiState.copy(availableThreads = runtimeAvailableThreads)
         }
+
+        viewModelScope.launch {
+            loadOrGenerateKeypair()
+        }
+    }
+
+    private suspend fun loadOrGenerateKeypair() {
+        val password = "password"
+        keypair = keypairRepository.loadEncryptedKeypair(password)
+        if (keypair == null) {
+            keypair = keypairRepository.generateNewKeypair()
+            keypairRepository.saveEncryptedKeypair(keypair!!, password)
+        }
+
+        val publicKey = keypair?.public as? Ed25519PublicKey
+        Log.d("HomeScreenViewModel", "Keypair public key: $publicKey")
     }
 
     fun decreaseSelectedThreads() {
@@ -119,10 +140,12 @@ class HomeScreenViewModel(
                     (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as OreHQMobileApplication)
                 val solanaRepository = application.container.solanaRepository
                 val poolRepository = application.container.poolRepository
+                val keypairRepository = application.container.keypairRepository
                 HomeScreenViewModel(
                     application = application,
                     solanaRepository = solanaRepository,
                     poolRepository = poolRepository,
+                    keypairRepository = keypairRepository,
                 )
             }
         }
