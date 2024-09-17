@@ -239,33 +239,69 @@ class HomeScreenViewModel(
         viewModelScope.launch(Dispatchers.Default) { // Use Dispatchers.Default for CPU-bound work
             try {
                 val challenge: List<UByte> = startMining.challenge.toList()
-                val startTime = System.nanoTime()
-                val maxCutoff = 10uL
-                val cutoff = minOf(startMining.cutoff, maxCutoff)
-                val jobs = List(homeUiState.selectedThreads) {
-                    async {
-                        uniffi.drillxmobile.dxHash(challenge, cutoff, 0uL, 10000uL)
+
+                var currentNonce = startMining.nonceRange.first
+                val lastNonce = startMining.nonceRange.last
+                val noncesPerThread = 10_000uL
+                var secondsOfRuntime = startMining.cutoff
+
+                var bestDifficulty = 0u
+
+                while(true) {
+                    val startTime = System.nanoTime()
+                    Log.d("HomeScreenViewModel", "Seconds of run time: $secondsOfRuntime")
+                    val maxBatchRuntime = 10uL // 10 seconds
+                    val currentBatchMaxRuntime = minOf(secondsOfRuntime, maxBatchRuntime)
+                    val jobs = List(homeUiState.selectedThreads) {
+                        val nonceForThisJob = currentNonce
+                        currentNonce += noncesPerThread
+                        async {
+                            uniffi.drillxmobile.dxHash(challenge, currentBatchMaxRuntime, nonceForThisJob, lastNonce)
+                        }
                     }
-                }
-                val results = jobs.awaitAll()
-                val endTime = System.nanoTime()
+                    val results = jobs.awaitAll()
+                    val endTime = System.nanoTime()
 
-                val bestResult = results.maxByOrNull { it.difficulty }
-                val totalNoncesChecked = results.sumOf { it.noncesChecked }
-                val elapsedTimeSeconds = (endTime - startTime) / 1_000_000_000.0
-                val newHashrate = totalNoncesChecked.toDouble() / elapsedTimeSeconds
+                    val totalNoncesChecked = results.sumOf { it.noncesChecked }
+                    val elapsedTimeSeconds = (endTime - startTime) / 1_000_000_000.0
+                    secondsOfRuntime -= elapsedTimeSeconds.toUInt()
+                    val newHashrate = totalNoncesChecked.toDouble() / elapsedTimeSeconds
 
-                bestResult?.let { solution ->
-                    Log.d("HomeScreenViewModel", "Send submission with diff: ${solution.difficulty}")
-                    sendSubmissionMessage(solution)
+                    val bestResult = results.maxByOrNull { it.difficulty }
+                    if (bestResult != null) {
+                        if (bestResult.difficulty > bestDifficulty) {
+                            bestDifficulty = bestResult.difficulty
+                            bestResult.let { solution ->
+                                Log.d("HomeScreenViewModel", "Send submission with diff: ${solution.difficulty}")
+                                sendSubmissionMessage(solution)
+                            }
+                            Log.d("HomeScreenViewModel", "Hashpower: $newHashrate")
+
+                            withContext(Dispatchers.Main) {
+                                homeUiState = homeUiState.copy(
+                                    difficulty = bestResult.difficulty ?: 0u
+                                )
+                            }
+                        }
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        homeUiState = homeUiState.copy(
+                            hashRate = newHashrate,
+                        )
+                    }
+
+                    if (secondsOfRuntime <= 2u) {
+                        break;
+
+                    }
                 }
 
                 sendReadyMessage()
-
+                // reset best diff
                 withContext(Dispatchers.Main) {
                     homeUiState = homeUiState.copy(
-                        hashRate = newHashrate,
-                        difficulty = bestResult?.difficulty ?: 0u
+                        difficulty = 0u
                     )
                 }
             } catch (e: Exception) {

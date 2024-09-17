@@ -52,9 +52,9 @@ class PoolRepository : IPoolRepository {
         val auth = Base64.getEncoder().encodeToString("${publicKey}:${signature}".toByteArray())
 
         client.wss(
-            urlString = "wss://domainexpansion.tech?timestamp=$timestamp",
+            urlString = "wss://ec1ipse.me?timestamp=$timestamp",
             request = {
-                header(HttpHeaders.Host, "domainexpansion.tech")
+                header(HttpHeaders.Host, "ec1ipse.me")
                 header(HttpHeaders.Authorization, "Basic $auth")
             }
         ) {
