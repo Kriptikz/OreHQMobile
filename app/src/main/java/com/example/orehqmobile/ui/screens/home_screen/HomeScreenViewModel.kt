@@ -263,8 +263,15 @@ class HomeScreenViewModel(
                     val endTime = System.nanoTime()
 
                     val totalNoncesChecked = results.sumOf { it.noncesChecked }
-                    val elapsedTimeSeconds = (endTime - startTime) / 1_000_000_000.0
-                    secondsOfRuntime -= elapsedTimeSeconds.toUInt()
+                    val elapsedTimeSeconds = if (endTime >= startTime) {
+                        (endTime - startTime) / 1_000_000_000.0
+                    } else {
+                        0.0
+                    }
+
+                    if (secondsOfRuntime >= elapsedTimeSeconds.toUInt()) {
+                        secondsOfRuntime -= elapsedTimeSeconds.toUInt()
+                    }
                     val newHashrate = totalNoncesChecked.toDouble() / elapsedTimeSeconds
 
                     val bestResult = results.maxByOrNull { it.difficulty }
