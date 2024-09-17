@@ -14,6 +14,7 @@ import com.example.orehqmobile.data.repositories.IKeypairRepository
 import com.example.orehqmobile.data.repositories.IPoolRepository
 import com.example.orehqmobile.data.repositories.ISolanaRepository
 import com.example.orehqmobile.data.models.Ed25519PublicKey
+import com.example.orehqmobile.data.models.ServerMessage
 import com.example.orehqmobile.data.repositories.toLittleEndianByteArray
 import com.funkatronics.encoders.Base58
 import com.funkatronics.encoders.Base64
@@ -74,16 +75,19 @@ class HomeScreenViewModel(
                         val sig = signatureResult.signature
                         val publicKey = (keypair!!.public as Ed25519PublicKeyParameters).encoded
 
-                        val privateKey = (keypair!!.private as Ed25519PrivateKeyParameters).encoded
+                        //val privateKey = (keypair!!.private as Ed25519PrivateKeyParameters).encoded
 
                         // Connect to WebSocket
                         viewModelScope.launch {
                             try {
                                 poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), Base58.encodeToString(publicKey)
-                                ) { sendReadyMessage() }.collect { data ->
+                                ) { sendReadyMessage() }.collect { serverMessage ->
                                     // Handle incoming WebSocket data
-                                    Log.d("HomeScreenViewModel", "Received WebSocket data: ${data.toHexString()}")
+                                    Log.d("HomeScreenViewModel", "Received WebSocket data: $serverMessage")
                                     // Process the data as needed
+                                    when (serverMessage) {
+                                      is ServerMessage.StartMining -> handleStartMining(serverMessage)
+                                    }
                                 }
                             } catch (e: Exception) {
                                 Log.e("HomeScreenViewModel", "WebSocket error: ${e.message}")
@@ -190,6 +194,11 @@ class HomeScreenViewModel(
                 Log.e("HomeScreenViewModel", "Unexpected error", e)
             }
         }
+    }
+
+    private fun handleStartMining(startMining: ServerMessage.StartMining) {
+        Log.d("HomeScreenViewModel", "Received StartMining: hash=${Base64.encodeToString(startMining.challenge.toByteArray())}, " +
+            "nonceRange=${startMining.nonceRange}, cutoff=${startMining.cutoff}")
     }
 
     fun mine() {
