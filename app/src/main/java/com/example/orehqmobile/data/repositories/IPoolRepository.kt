@@ -10,6 +10,7 @@ import io.ktor.client.plugins.websocket.ws
 import io.ktor.client.plugins.websocket.wss
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
@@ -27,7 +28,6 @@ interface IPoolRepository {
         timestamp: ULong,
         signature: String,
         publicKey: String,
-        sendReadyMessage: () -> Unit
     ): Flow<ServerMessage>
 
     suspend fun fetchTimestamp(): Result<ULong>
@@ -49,39 +49,29 @@ class PoolRepository : IPoolRepository {
         timestamp: ULong,
         signature: String,
         publicKey: String,
-        sendReadyMessage: () -> Unit
     ): Flow<ServerMessage> = flow {
         val auth = Base64.getEncoder().encodeToString("${publicKey}:${signature}".toByteArray())
 
         client.wss(
-            urlString = "wss://ec1ipse.me?timestamp=$timestamp",
+            urlString = "wss://domainexpansion.tech/v2/ws?timestamp=$timestamp",
             request = {
-                header(HttpHeaders.Host, "ec1ipse.me")
+                header(HttpHeaders.Host, "domainexpansion.tech")
                 header(HttpHeaders.Authorization, "Basic $auth")
             }
         ) {
             webSocketSession = this
-            sendReadyMessage()
             for (frame in incoming) {
                 if (frame is Frame.Text) {
                     Log.d("PoolRepository", "Got Text: ${frame.readText()}")
                 }
                 if (frame is Frame.Binary) {
-                    val message = parseServerMessage(frame.readBytes().toUByteArray())
+                    val message = ServerMessage.fromUByteArray(frame.readBytes().toUByteArray())
                     message?.let { emit(it) }
                 }
             }
         }
     }
 
-    private fun parseServerMessage(data: UByteArray): ServerMessage? {
-        if (data.isEmpty()) return null
-
-        return when (data[0].toUInt()) {
-            0U -> parseStartMining(data)
-            else -> {
-                Log.w("PoolRepository", "Unknown message type: ${data[0]}")
-                null
     override suspend fun fetchTimestamp(): Result<ULong> {
         return try {
             val response: HttpResponse = client.get("https://ec1ipse.me/timestamp")
@@ -95,21 +85,6 @@ class PoolRepository : IPoolRepository {
         }
     }
 
-    private fun parseStartMining(data: UByteArray): ServerMessage.StartMining? {
-        if (data.size < 57) {
-            Log.w("PoolRepository", "Invalid data for StartMining message")
-            return null
-        }
-
-        val challenge = data.slice(1..32).toUByteArray()
-        val cutoff = data.slice(33..40).toUByteArray().toULong()
-        val nonceStart = data.slice(41..48).toUByteArray().toULong()
-        Log.d("PoolRepository", "Nonce Start: $nonceStart")
-        val nonceEnd = data.slice(49..56).toUByteArray().toULong()
-        Log.d("PoolRepository", "Nonce End: $nonceEnd")
-
-
-        return ServerMessage.StartMining(challenge, nonceStart until nonceEnd, cutoff)
     override suspend fun fetchMinerBalance(publicKey: String): Result<Double> {
       return try {
           val response: HttpResponse = client.get("https://ec1ipse.me/miner/balance") {
@@ -143,31 +118,5 @@ class PoolRepository : IPoolRepository {
         webSocketSession?.send(Frame.Binary(true, message))
             ?: throw IllegalStateException("WebSocket session not initialized")
     }
-
-    private fun generateWebSocketKey(): String {
-        return Base64.getEncoder()
-            .encodeToString(UUID.randomUUID().toString().take(16).toByteArray())
-    }
-}
-
-// Helper conversion functions
-public fun ULong.toLittleEndianByteArray(): ByteArray {
-    return ByteArray(8) { i -> (this shr (8 * i)).toByte() }
-}
-
-fun Long.toLittleEndianByteArray(): ByteArray {
-    return ByteArray(8) { i -> (this shr (8 * i) and 0xFFL).toByte() }
-}
-
-fun UByteArray.toULong(): ULong = this.foldIndexed(0UL) { index, acc, byte ->
-    acc or (byte.toULong() shl (index * 8))
-}
-
-private fun List<UByte>.toUByteArray(): UByteArray {
-    return UByteArray(size) { this[it] }
-}
-
-fun ULong.toLittleEndianUByteArray(): UByteArray {
-    return UByteArray(8) { i -> ((this shr (8 * i)) and 0xFFU).toUByte() }
 }
 
