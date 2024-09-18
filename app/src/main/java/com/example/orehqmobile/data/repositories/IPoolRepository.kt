@@ -34,7 +34,10 @@ interface IPoolRepository {
     suspend fun sendWebSocketMessage(message: ByteArray)
     suspend fun fetchMinerBalance(publicKey: String): Result<Double>
     suspend fun fetchMinerRewards(publicKey: String): Result<Double>
+    suspend fun fetchActiveMinersCount(): Result<Int>
 }
+
+const val HOST_URL = "domainexpansion.tech"
 
 class PoolRepository : IPoolRepository {
     private val client = HttpClient {
@@ -53,9 +56,9 @@ class PoolRepository : IPoolRepository {
         val auth = Base64.getEncoder().encodeToString("${publicKey}:${signature}".toByteArray())
 
         client.wss(
-            urlString = "wss://domainexpansion.tech/v2/ws?timestamp=$timestamp",
+            urlString = "wss://$HOST_URL/v2/ws?timestamp=$timestamp",
             request = {
-                header(HttpHeaders.Host, "domainexpansion.tech")
+                header(HttpHeaders.Host, HOST_URL)
                 header(HttpHeaders.Authorization, "Basic $auth")
             }
         ) {
@@ -74,7 +77,7 @@ class PoolRepository : IPoolRepository {
 
     override suspend fun fetchTimestamp(): Result<ULong> {
         return try {
-            val response: HttpResponse = client.get("https://ec1ipse.me/timestamp")
+            val response: HttpResponse = client.get("https://$HOST_URL/timestamp")
             if (response.status.value in 200..299) {
                 Result.success(response.bodyAsText().toULong())
             } else {
@@ -87,7 +90,7 @@ class PoolRepository : IPoolRepository {
 
     override suspend fun fetchMinerBalance(publicKey: String): Result<Double> {
       return try {
-          val response: HttpResponse = client.get("https://ec1ipse.me/miner/balance") {
+          val response: HttpResponse = client.get("https://$HOST_URL/miner/balance") {
               parameter("pubkey", publicKey)
           }
           if (response.status.value in 200..299) {
@@ -102,11 +105,24 @@ class PoolRepository : IPoolRepository {
 
     override suspend fun fetchMinerRewards(publicKey: String): Result<Double> {
         return try {
-            val response: HttpResponse = client.get("https://ec1ipse.me/miner/rewards") {
+            val response: HttpResponse = client.get("https://$HOST_URL/miner/rewards") {
                 parameter("pubkey", publicKey)
             }
             if (response.status.value in 200..299) {
                 Result.success(response.bodyAsText().toDouble())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun fetchActiveMinersCount(): Result<Int> {
+        return try {
+            val response: HttpResponse = client.get("https://$HOST_URL/active-miners")
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText().toInt())
             } else {
                 Result.failure(IOException("HTTP error ${response.status.value}"))
             }
