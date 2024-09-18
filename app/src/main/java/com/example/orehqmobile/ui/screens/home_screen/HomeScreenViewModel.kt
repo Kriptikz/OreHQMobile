@@ -15,13 +15,14 @@ import com.example.orehqmobile.data.repositories.IPoolRepository
 import com.example.orehqmobile.data.repositories.ISolanaRepository
 import com.example.orehqmobile.data.models.Ed25519PublicKey
 import com.example.orehqmobile.data.models.ServerMessage
-import com.example.orehqmobile.data.repositories.toLittleEndianByteArray
+import com.example.orehqmobile.data.models.toLittleEndianByteArray
 import com.funkatronics.encoders.Base58
 import com.funkatronics.encoders.Base64
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
@@ -34,7 +35,11 @@ data class HomeUiState(
     var availableThreads: Int,
     var hashRate: Double,
     var difficulty: UInt,
+    var lastDifficulty: UInt,
     var selectedThreads: Int,
+    var isMining: Boolean,
+    var claimableBalance: Double,
+    var walletTokenBalance: Double,
 )
 
 @OptIn(ExperimentalStdlibApi::class)
@@ -50,7 +55,11 @@ class HomeScreenViewModel(
             availableThreads = 1,
             hashRate = 0.0,
             difficulty = 0u,
+            lastDifficulty = 0u,
             selectedThreads =  1,
+            isMining = false,
+            claimableBalance = 0.0,
+            walletTokenBalance = 0.0,
         )
     )
         private set
@@ -82,12 +91,13 @@ class HomeScreenViewModel(
                         viewModelScope.launch {
                             try {
                                 poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), Base58.encodeToString(publicKey)
-                                ) { sendReadyMessage() }.collect { serverMessage ->
+                                ).collect { serverMessage ->
                                     // Handle incoming WebSocket data
                                     Log.d("HomeScreenViewModel", "Received WebSocket data: $serverMessage")
                                     // Process the data as needed
                                     when (serverMessage) {
                                       is ServerMessage.StartMining -> handleStartMining(serverMessage)
+                                      is ServerMessage.PoolSubmissionResult -> handlePoolSubmissionResult(serverMessage)
                                     }
                                 }
                             } catch (e: Exception) {
@@ -114,6 +124,46 @@ class HomeScreenViewModel(
                         Log.e("HomeScreenViewModel", "Error fetching timestamp", error)
                     }
                 )
+
+                // Fetch wallet token balance
+                val publicKey = Base58.encodeToString((keypair!!.public as Ed25519PublicKeyParameters).encoded)
+                val balanceResult = poolRepository.fetchMinerBalance(publicKey)
+                balanceResult.fold(
+                    onSuccess = { balance ->
+                        homeUiState = homeUiState.copy(walletTokenBalance = balance)
+                    },
+                    onFailure = { error ->
+                        Log.e("HomeScreenViewModel", "Error fetching wallet token balance", error)
+                    }
+                )
+
+                // Fetch miner claimable rewards
+                val balanceRewardsResult = poolRepository.fetchMinerRewards(publicKey)
+                balanceRewardsResult.fold(
+                    onSuccess = { balance ->
+                        homeUiState = homeUiState.copy(claimableBalance = balance)
+                    },
+                    onFailure = { error ->
+                        Log.e("HomeScreenViewModel", "Error fetching wallet rewards balance", error)
+                    }
+                )
+
+                // Fetch miner claimable rewards every 1 minute
+                viewModelScope.launch {
+                    while (true) {
+                        val publicKey = Base58.encodeToString((keypair!!.public as Ed25519PublicKeyParameters).encoded)
+                        val balanceRewardsResult = poolRepository.fetchMinerRewards(publicKey)
+                        balanceRewardsResult.fold(
+                            onSuccess = { balance ->
+                                homeUiState = homeUiState.copy(claimableBalance = balance)
+                            },
+                            onFailure = { error ->
+                                Log.e("HomeScreenViewModel", "Error fetching wallet rewards balance", error)
+                            }
+                        )
+                        delay(60_000) // Delay for 1 minute
+                    }
+                }
             } catch (e: Exception) {
                 Log.e("HomeScreenViewModel", "Unexpected error", e)
             }
@@ -243,11 +293,11 @@ class HomeScreenViewModel(
                 var currentNonce = startMining.nonceRange.first
                 val lastNonce = startMining.nonceRange.last
                 val noncesPerThread = 10_000uL
-                var secondsOfRuntime = startMining.cutoff
+                var secondsOfRuntime = startMining.cutoff + 5uL
 
                 var bestDifficulty = 0u
 
-                while(true) {
+                while(homeUiState.isMining) {
                     val startTime = System.nanoTime()
                     Log.d("HomeScreenViewModel", "Seconds of run time: $secondsOfRuntime")
                     val maxBatchRuntime = 10uL // 10 seconds
@@ -300,7 +350,6 @@ class HomeScreenViewModel(
 
                     if (secondsOfRuntime <= 2u) {
                         break;
-
                     }
                 }
 
@@ -308,7 +357,8 @@ class HomeScreenViewModel(
                 // reset best diff
                 withContext(Dispatchers.Main) {
                     homeUiState = homeUiState.copy(
-                        difficulty = 0u
+                        difficulty = 0u,
+                        lastDifficulty = homeUiState.difficulty
                     )
                 }
             } catch (e: Exception) {
@@ -319,6 +369,33 @@ class HomeScreenViewModel(
                 }
             }
         }
+    }
+
+    private fun handlePoolSubmissionResult(poolSubmissionResult: ServerMessage.PoolSubmissionResult) {
+        Log.d("HomeScreenViewModel", "Received pool submission result:")
+        Log.d("HomeScreenViewModel", "Difficulty: ${poolSubmissionResult.difficulty}")
+        Log.d("HomeScreenViewModel", "Total Balance: ${"%.11f".format(poolSubmissionResult.totalBalance)}")
+        Log.d("HomeScreenViewModel", "Total Rewards: ${"%.11f".format(poolSubmissionResult.totalRewards)}")
+        Log.d("HomeScreenViewModel", "Top Stake: ${"%.11f".format(poolSubmissionResult.topStake)}")
+        Log.d("HomeScreenViewModel", "Multiplier: ${"%.11f".format(poolSubmissionResult.multiplier)}")
+        Log.d("HomeScreenViewModel", "Active Miners: ${poolSubmissionResult.activeMiners}")
+        Log.d("HomeScreenViewModel", "Challenge: ${poolSubmissionResult.challenge.joinToString(", ")}")
+        Log.d("HomeScreenViewModel", "Best Nonce: ${poolSubmissionResult.bestNonce}")
+        Log.d("HomeScreenViewModel", "Miner Supplied Difficulty: ${poolSubmissionResult.minerSuppliedDifficulty}")
+        Log.d("HomeScreenViewModel", "Miner Earned Rewards: ${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}")
+        Log.d("HomeScreenViewModel", "Miner Percentage: ${"%.11f".format(poolSubmissionResult.minerPercentage)}")
+    }
+
+    fun toggleMining() {
+        val toggled = !homeUiState.isMining
+
+        if (toggled) {
+            sendReadyMessage()
+        }
+
+        homeUiState = homeUiState.copy(
+            isMining = toggled
+        )
     }
 
     fun mine() {

@@ -32,6 +32,8 @@ interface IPoolRepository {
 
     suspend fun fetchTimestamp(): Result<ULong>
     suspend fun sendWebSocketMessage(message: ByteArray)
+    suspend fun fetchMinerBalance(publicKey: String): Result<Double>
+    suspend fun fetchMinerRewards(publicKey: String): Result<Double>
 }
 
 class PoolRepository : IPoolRepository {
@@ -80,7 +82,16 @@ class PoolRepository : IPoolRepository {
             else -> {
                 Log.w("PoolRepository", "Unknown message type: ${data[0]}")
                 null
+    override suspend fun fetchTimestamp(): Result<ULong> {
+        return try {
+            val response: HttpResponse = client.get("https://ec1ipse.me/timestamp")
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText().toULong())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}"))
             }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -99,13 +110,28 @@ class PoolRepository : IPoolRepository {
 
 
         return ServerMessage.StartMining(challenge, nonceStart until nonceEnd, cutoff)
+    override suspend fun fetchMinerBalance(publicKey: String): Result<Double> {
+      return try {
+          val response: HttpResponse = client.get("https://ec1ipse.me/miner/balance") {
+              parameter("pubkey", publicKey)
+          }
+          if (response.status.value in 200..299) {
+              Result.success(response.bodyAsText().toDouble())
+          } else {
+              Result.failure(IOException("HTTP error ${response.status.value}"))
+          }
+      } catch (e: Exception) {
+          Result.failure(e)
+      }
     }
 
-    override suspend fun fetchTimestamp(): Result<ULong> {
+    override suspend fun fetchMinerRewards(publicKey: String): Result<Double> {
         return try {
-            val response: HttpResponse = client.get("https://ec1ipse.me/timestamp")
+            val response: HttpResponse = client.get("https://ec1ipse.me/miner/rewards") {
+                parameter("pubkey", publicKey)
+            }
             if (response.status.value in 200..299) {
-                Result.success(response.bodyAsText().toULong())
+                Result.success(response.bodyAsText().toDouble())
             } else {
                 Result.failure(IOException("HTTP error ${response.status.value}"))
             }
@@ -113,7 +139,6 @@ class PoolRepository : IPoolRepository {
             Result.failure(e)
         }
     }
-
     override suspend fun sendWebSocketMessage(message: ByteArray) {
         webSocketSession?.send(Frame.Binary(true, message))
             ?: throw IllegalStateException("WebSocket session not initialized")

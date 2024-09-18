@@ -6,8 +6,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,27 +28,41 @@ fun HomeScreen(
     homeUiState: HomeUiState,
     onIncreaseSelectedThreads: () -> Unit,
     onDecreaseSelectedThreads: () -> Unit,
-    onRunBenchmark: () -> Unit,
-    onFetchTimestamp: () -> Unit,
+    onToggleMining: () -> Unit,
 ) {
     OreHQMobileScaffold(title = "Home") {
         val hashrate = homeUiState.hashRate
         val difficulty = homeUiState.difficulty
+        val lastDifficulty = homeUiState.lastDifficulty
         val availableThreads = homeUiState.availableThreads
         val selectedThreads = homeUiState.selectedThreads
+        val isMining = homeUiState.isMining
+        val claimableBalance = homeUiState.claimableBalance
+        val walletTokenBalance = homeUiState.walletTokenBalance
 
         Column(
             modifier = Modifier
-                .fillMaxSize() // Fill the whole screen size
+                .fillMaxSize()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.Center, // Center vertically
-            horizontalAlignment = Alignment.CenterHorizontally // Center horizontally
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Text showing available threads
-            Text(text = "Available Threads: $availableThreads", modifier = Modifier.padding(bottom = 8.dp))
+            // Wallet ORE Balance
+            Text(
+                text = "Wallet: $walletTokenBalance ORE",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 32.dp)
+            )
+            // Mining status
+            Text(
+                text = if (isMining) "Mining..." else "Stopped",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
 
-            // Text showing the current hashrate
-            Text(text = "Hashrate: $hashrate", modifier = Modifier.padding(bottom = 16.dp))
+            // Hashpower and difficulty
+            Text(text = "Hashpower: $hashrate", modifier = Modifier.padding(bottom = 8.dp))
+            Text(text = "Last Difficulty: $lastDifficulty", modifier = Modifier.padding(bottom = 16.dp))
             Text(text = "Difficulty: $difficulty", modifier = Modifier.padding(bottom = 16.dp))
 
             // Thread count selector
@@ -50,29 +70,33 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
+                Text(text = "Threads:", modifier = Modifier.padding(end = 8.dp))
                 IconButton(onClick = onDecreaseSelectedThreads) {
-                    Text("▼")
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease threads")
                 }
                 Text(
-                    text = "Threads: $selectedThreads",
+                    text = selectedThreads.toString(),
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 IconButton(onClick = onIncreaseSelectedThreads) {
-                    Text("▲")
+                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase threads")
                 }
+                Text(text = "/ $availableThreads", modifier = Modifier.padding(start = 8.dp))
             }
 
-            // Button to run the benchmark
+            // Mining toggle button
             Button(
-                onClick = onRunBenchmark,
-                modifier = Modifier.fillMaxWidth() // Make button fill width for better appearance on mobile
+                onClick = onToggleMining,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Run Benchmark")
+                Text(if (isMining) "Stop Mining" else "Start Mining")
             }
 
-            Button(onClick = onFetchTimestamp, modifier = Modifier.fillMaxWidth()) {
-                Text("Fetch Timestamp")
-            }
+            Text(
+                text = "Claimable: ${String.format("%.11f", claimableBalance)} ORE",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 32.dp)
+            )
         }
     }
 }
@@ -86,12 +110,15 @@ fun HomeScreenPreview() {
                 availableThreads = 1,
                 hashRate = 0.0,
                 difficulty = 0u,
+                lastDifficulty = 0u,
                 selectedThreads =  1,
+                isMining = false,
+                claimableBalance = 0.0,
+                walletTokenBalance = 0.0,
             ),
             onDecreaseSelectedThreads = {},
             onIncreaseSelectedThreads = {},
-            onRunBenchmark = {},
-            onFetchTimestamp = {},
+            onToggleMining = {},
         )
     }
 }

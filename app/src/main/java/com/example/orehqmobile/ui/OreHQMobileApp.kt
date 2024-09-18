@@ -22,8 +22,7 @@ fun OreHQMobileApp(
                 homeUiState = homeScreenViewModel.homeUiState,
                 onIncreaseSelectedThreads = { homeScreenViewModel.increaseSelectedThreads() },
                 onDecreaseSelectedThreads = { homeScreenViewModel.decreaseSelectedThreads() },
-                onRunBenchmark = { homeScreenViewModel.mine() },
-                onFetchTimestamp = { homeScreenViewModel.fetchTimestamp() },
+                onToggleMining = { homeScreenViewModel.toggleMining() },
             )
         }
 
