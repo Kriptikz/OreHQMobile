@@ -29,7 +29,6 @@ import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import uniffi.drillxmobile.DxSolution
-import java.security.KeyPair
 
 data class HomeUiState(
     var availableThreads: Int,
@@ -37,9 +36,10 @@ data class HomeUiState(
     var difficulty: UInt,
     var lastDifficulty: UInt,
     var selectedThreads: Int,
-    var isMining: Boolean,
+    var isMiningEnabled: Boolean,
     var claimableBalance: Double,
     var walletTokenBalance: Double,
+    var activeMiners: Int,
 )
 
 @OptIn(ExperimentalStdlibApi::class)
@@ -57,9 +57,10 @@ class HomeScreenViewModel(
             difficulty = 0u,
             lastDifficulty = 0u,
             selectedThreads =  1,
-            isMining = false,
+            isMiningEnabled = false,
             claimableBalance = 0.0,
             walletTokenBalance = 0.0,
+            activeMiners = 0,
         )
     )
         private set
@@ -134,6 +135,16 @@ class HomeScreenViewModel(
                     },
                     onFailure = { error ->
                         Log.e("HomeScreenViewModel", "Error fetching wallet token balance", error)
+                    }
+                )
+
+                val activeMinersCountResult = poolRepository.fetchActiveMinersCount()
+                activeMinersCountResult.fold(
+                    onSuccess = { activeMinersCount ->
+                        homeUiState = homeUiState.copy(activeMiners = activeMinersCount)
+                    },
+                    onFailure = { error ->
+                        Log.e("HomeScreenViewModel", "Error fetching wallet rewards balance", error)
                     }
                 )
 
@@ -297,7 +308,7 @@ class HomeScreenViewModel(
 
                 var bestDifficulty = 0u
 
-                while(homeUiState.isMining) {
+                while(homeUiState.isMiningEnabled) {
                     val startTime = System.nanoTime()
                     Log.d("HomeScreenViewModel", "Seconds of run time: $secondsOfRuntime")
                     val maxBatchRuntime = 10uL // 10 seconds
@@ -387,14 +398,14 @@ class HomeScreenViewModel(
     }
 
     fun toggleMining() {
-        val toggled = !homeUiState.isMining
+        val toggled = !homeUiState.isMiningEnabled
 
         if (toggled) {
             sendReadyMessage()
         }
 
         homeUiState = homeUiState.copy(
-            isMining = toggled
+            isMiningEnabled = toggled
         )
     }
 

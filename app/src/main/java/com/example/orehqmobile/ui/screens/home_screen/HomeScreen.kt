@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
@@ -36,9 +35,10 @@ fun HomeScreen(
         val lastDifficulty = homeUiState.lastDifficulty
         val availableThreads = homeUiState.availableThreads
         val selectedThreads = homeUiState.selectedThreads
-        val isMining = homeUiState.isMining
+        val isMiningEnabled = homeUiState.isMiningEnabled
         val claimableBalance = homeUiState.claimableBalance
         val walletTokenBalance = homeUiState.walletTokenBalance
+        val activeMiners = homeUiState.activeMiners
 
         Column(
             modifier = Modifier
@@ -55,12 +55,13 @@ fun HomeScreen(
             )
             // Mining status
             Text(
-                text = if (isMining) "Mining..." else "Stopped",
+                text = if (isMiningEnabled) "Mining..." else "Stopped",
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
 
-            // Hashpower and difficulty
+            Text(text = "Active Miners: $activeMiners", modifier = Modifier.padding(bottom = 8.dp))
+
             Text(text = "Hashpower: $hashrate", modifier = Modifier.padding(bottom = 8.dp))
             Text(text = "Last Difficulty: $lastDifficulty", modifier = Modifier.padding(bottom = 16.dp))
             Text(text = "Difficulty: $difficulty", modifier = Modifier.padding(bottom = 16.dp))
@@ -89,7 +90,7 @@ fun HomeScreen(
                 onClick = onToggleMining,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isMining) "Stop Mining" else "Start Mining")
+                Text(if (isMiningEnabled) "Stop Mining" else "Start Mining")
             }
 
             Text(
@@ -112,9 +113,10 @@ fun HomeScreenPreview() {
                 difficulty = 0u,
                 lastDifficulty = 0u,
                 selectedThreads =  1,
-                isMining = false,
+                isMiningEnabled = false,
                 claimableBalance = 0.0,
                 walletTokenBalance = 0.0,
+                activeMiners = 0,
             ),
             onDecreaseSelectedThreads = {},
             onIncreaseSelectedThreads = {},
