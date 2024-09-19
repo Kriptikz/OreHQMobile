@@ -35,9 +35,12 @@ interface IPoolRepository {
     suspend fun fetchMinerBalance(publicKey: String): Result<Double>
     suspend fun fetchMinerRewards(publicKey: String): Result<Double>
     suspend fun fetchActiveMinersCount(): Result<Int>
+    suspend fun fetchPoolBalance(): Result<Double>
+    suspend fun fetchPoolMultiplier(): Result<Double>
 }
 
 const val HOST_URL = "domainexpansion.tech"
+const val STATS_HOST_URL = "domainexpansion.tech"
 
 class PoolRepository : IPoolRepository {
     private val client = HttpClient {
@@ -130,9 +133,36 @@ class PoolRepository : IPoolRepository {
             Result.failure(e)
         }
     }
+
     override suspend fun sendWebSocketMessage(message: ByteArray) {
         webSocketSession?.send(Frame.Binary(true, message))
             ?: throw IllegalStateException("WebSocket session not initialized")
+    }
+
+    override suspend fun fetchPoolBalance(): Result<Double> {
+        return try {
+            val response: HttpResponse = client.get("https://$STATS_HOST_URL/pool/staked")
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText().toDouble())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun fetchPoolMultiplier(): Result<Double> {
+        return try {
+            val response: HttpResponse = client.get("https://$STATS_HOST_URL/stake-multiplier")
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText().toDouble())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }
 
