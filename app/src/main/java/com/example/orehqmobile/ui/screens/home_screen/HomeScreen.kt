@@ -39,6 +39,9 @@ fun HomeScreen(
         val claimableBalance = homeUiState.claimableBalance
         val walletTokenBalance = homeUiState.walletTokenBalance
         val activeMiners = homeUiState.activeMiners
+        val poolBalance = homeUiState.poolBalance
+        val topStake = homeUiState.topStake
+        val poolMultiplier = homeUiState.poolMultiplier
 
         Column(
             modifier = Modifier
@@ -61,6 +64,21 @@ fun HomeScreen(
             )
 
             Text(text = "Active Miners: $activeMiners", modifier = Modifier.padding(bottom = 8.dp))
+            Text(
+                text = "Pool Balance: ${String.format("%.11f", poolBalance)} ORE",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 32.dp)
+            )
+            Text(
+                text = "Top Stake: ${String.format("%.11f", topStake)} ORE",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 32.dp)
+            )
+            Text(
+                text = "Pool Multiplier: ${String.format("%.2f", poolMultiplier)}x",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.padding(top = 32.dp, bottom = 32.dp)
+            )
 
             Text(text = "Hashpower: $hashrate", modifier = Modifier.padding(bottom = 8.dp))
             Text(text = "Last Difficulty: $lastDifficulty", modifier = Modifier.padding(bottom = 16.dp))
@@ -117,6 +135,9 @@ fun HomeScreenPreview() {
                 claimableBalance = 0.0,
                 walletTokenBalance = 0.0,
                 activeMiners = 0,
+                poolBalance = 0.0,
+                topStake = 0.0,
+                poolMultiplier = 0.0,
             ),
             onDecreaseSelectedThreads = {},
             onIncreaseSelectedThreads = {},
