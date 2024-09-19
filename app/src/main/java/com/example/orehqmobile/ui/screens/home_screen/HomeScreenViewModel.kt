@@ -40,6 +40,9 @@ data class HomeUiState(
     var claimableBalance: Double,
     var walletTokenBalance: Double,
     var activeMiners: Int,
+    var poolBalance: Double,
+    var poolMultiplier: Double,
+    var topStake: Double,
 )
 
 @OptIn(ExperimentalStdlibApi::class)
@@ -61,6 +64,9 @@ class HomeScreenViewModel(
             claimableBalance = 0.0,
             walletTokenBalance = 0.0,
             activeMiners = 0,
+            poolBalance = 0.0,
+            poolMultiplier = 0.0,
+            topStake = 0.0
         )
     )
         private set
@@ -89,7 +95,7 @@ class HomeScreenViewModel(
                         //val privateKey = (keypair!!.private as Ed25519PrivateKeyParameters).encoded
 
                         // Connect to WebSocket
-                        viewModelScope.launch {
+                        viewModelScope.launch(Dispatchers.IO) {
                             try {
                                 poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), Base58.encodeToString(publicKey)
                                 ).collect { serverMessage ->
@@ -159,8 +165,32 @@ class HomeScreenViewModel(
                     }
                 )
 
+                Log.d("HomeScreenViewModel", "Fetching pool balance")
+                val poolBalanceResult = poolRepository.fetchPoolBalance()
+                poolBalanceResult.fold(
+                    onSuccess = { balance ->
+                        Log.d("HomeScreenViewModel", "SUCCESS fetching pool balance")
+                        homeUiState = homeUiState.copy(poolBalance = balance)
+                    },
+                    onFailure = { error ->
+                        Log.e("HomeScreenViewModel", "Error fetching pool balance", error)
+                    }
+                )
+
+                val poolMultiplierResult = poolRepository.fetchPoolMultiplier()
+                poolMultiplierResult.fold(
+                    onSuccess = { data ->
+                        homeUiState = homeUiState.copy(poolMultiplier = data)
+                    },
+                    onFailure = { error ->
+                        Log.e("HomeScreenViewModel", "Error fetching pool multiplier", error)
+                    }
+                )
+
+                // TODO add top stake fetch
+
                 // Fetch miner claimable rewards every 1 minute
-                viewModelScope.launch {
+                viewModelScope.launch(Dispatchers.IO) {
                     while (true) {
                         val publicKey = Base58.encodeToString((keypair!!.public as Ed25519PublicKeyParameters).encoded)
                         val balanceRewardsResult = poolRepository.fetchMinerRewards(publicKey)
@@ -206,7 +236,7 @@ class HomeScreenViewModel(
     }
 
     private fun sendReadyMessage() {
-      viewModelScope.launch {
+      viewModelScope.launch(Dispatchers.IO) {
           try {
               val now = System.currentTimeMillis() / 1000 // Current time in seconds
               val msg = now.toLittleEndianByteArray()
@@ -229,7 +259,7 @@ class HomeScreenViewModel(
   }
 
     private fun sendSubmissionMessage(submission: DxSolution) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val bestHashBin = submission.digest.toUByteArray()
                 val bestNonceBin = submission.nonce.toUByteArray()
@@ -276,7 +306,7 @@ class HomeScreenViewModel(
     }
 
     fun fetchTimestamp() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val result = poolRepository.fetchTimestamp()
                 result.fold(
@@ -395,6 +425,13 @@ class HomeScreenViewModel(
         Log.d("HomeScreenViewModel", "Miner Supplied Difficulty: ${poolSubmissionResult.minerSuppliedDifficulty}")
         Log.d("HomeScreenViewModel", "Miner Earned Rewards: ${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}")
         Log.d("HomeScreenViewModel", "Miner Percentage: ${"%.11f".format(poolSubmissionResult.minerPercentage)}")
+
+        homeUiState = homeUiState.copy(
+            activeMiners = poolSubmissionResult.activeMiners.toInt(),
+            poolBalance = poolSubmissionResult.totalBalance,
+            topStake = poolSubmissionResult.topStake,
+            poolMultiplier = poolSubmissionResult.multiplier,
+        )
     }
 
     fun toggleMining() {
@@ -407,48 +444,6 @@ class HomeScreenViewModel(
         homeUiState = homeUiState.copy(
             isMiningEnabled = toggled
         )
-    }
-
-    fun mine() {
-        // Launch a coroutine for heavy computation in the background
-        viewModelScope.launch(Dispatchers.Default) { // Use Dispatchers.Default for CPU-bound work
-            try {
-                val challenge: List<UByte> = List(32) { 0.toUByte() }
-                val startTime = System.nanoTime()
-                val jobs = List(homeUiState.selectedThreads) {
-                    async {
-                        uniffi.drillxmobile.dxHash(challenge, 30uL, 0uL, 10000uL)
-                    }
-                }
-                val results = jobs.awaitAll()
-                val endTime = System.nanoTime()
-
-                val bestResult = results.maxByOrNull { it.difficulty }
-                val totalNoncesChecked = results.sumOf { it.noncesChecked }
-                val elapsedTimeSeconds = (endTime - startTime) / 1_000_000_000.0
-                val newHashrate = totalNoncesChecked.toDouble() / elapsedTimeSeconds
-
-                bestResult?.let { solution ->
-                    Log.d("HomeScreenViewModel", "Send submission with diff: ${solution.difficulty}")
-                    sendSubmissionMessage(solution)
-                }
-
-                sendReadyMessage()
-
-                withContext(Dispatchers.Main) {
-                    homeUiState = homeUiState.copy(
-                        hashRate = newHashrate,
-                        difficulty = bestResult?.difficulty ?: 0u
-                    )
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                withContext(Dispatchers.Main) {
-//                    hashrate = "Error: ${e.message}"
-//                    difficulty = "Error occurred"
-                }
-            }
-        }
     }
 
     companion object {
