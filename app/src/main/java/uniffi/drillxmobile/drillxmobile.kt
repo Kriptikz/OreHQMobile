@@ -692,6 +692,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -707,6 +709,8 @@ internal interface UniffiLib : Library {
         
     }
 
+    fun uniffi_drillxmobile_fn_func_dx_generate_key(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_drillxmobile_fn_func_dx_hash(`challenge`: RustBuffer.ByValue,`cutoff`: Long,`startNonce`: Long,`endNonce`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun ffi_drillxmobile_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -821,6 +825,8 @@ internal interface UniffiLib : Library {
     ): Unit
     fun ffi_drillxmobile_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_drillxmobile_checksum_func_dx_generate_key(
+    ): Short
     fun uniffi_drillxmobile_checksum_func_dx_hash(
     ): Short
     fun ffi_drillxmobile_uniffi_contract_version(
@@ -840,6 +846,9 @@ private fun uniffiCheckContractApiVersion(lib: UniffiLib) {
 
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: UniffiLib) {
+    if (lib.uniffi_drillxmobile_checksum_func_dx_generate_key() != 59320.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_drillxmobile_checksum_func_dx_hash() != 13329.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -997,6 +1006,51 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
     }
 }
 
+public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
+    override fun read(buf: ByteBuffer): ByteArray {
+        val len = buf.getInt()
+        val byteArr = ByteArray(len)
+        buf.get(byteArr)
+        return byteArr
+    }
+    override fun allocationSize(value: ByteArray): ULong {
+        return 4UL + value.size.toULong()
+    }
+    override fun write(value: ByteArray, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        buf.put(value)
+    }
+}
+
+
+
+data class DxGeneratedKey (
+    var `wordList`: kotlin.String, 
+    var `keypair`: kotlin.ByteArray
+) {
+    
+    companion object
+}
+
+public object FfiConverterTypeDxGeneratedKey: FfiConverterRustBuffer<DxGeneratedKey> {
+    override fun read(buf: ByteBuffer): DxGeneratedKey {
+        return DxGeneratedKey(
+            FfiConverterString.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DxGeneratedKey) = (
+            FfiConverterString.allocationSize(value.`wordList`) +
+            FfiConverterByteArray.allocationSize(value.`keypair`)
+    )
+
+    override fun write(value: DxGeneratedKey, buf: ByteBuffer) {
+            FfiConverterString.write(value.`wordList`, buf)
+            FfiConverterByteArray.write(value.`keypair`, buf)
+    }
+}
+
 
 
 data class DxSolution (
@@ -1057,7 +1111,16 @@ public object FfiConverterSequenceUByte: FfiConverterRustBuffer<List<kotlin.UByt
             FfiConverterUByte.write(it, buf)
         }
     }
-} fun `dxHash`(`challenge`: List<kotlin.UByte>, `cutoff`: kotlin.ULong, `startNonce`: kotlin.ULong, `endNonce`: kotlin.ULong): DxSolution {
+} fun `dxGenerateKey`(): DxGeneratedKey {
+            return FfiConverterTypeDxGeneratedKey.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_drillxmobile_fn_func_dx_generate_key(
+        _status)
+}
+    )
+    }
+    
+ fun `dxHash`(`challenge`: List<kotlin.UByte>, `cutoff`: kotlin.ULong, `startNonce`: kotlin.ULong, `endNonce`: kotlin.ULong): DxSolution {
             return FfiConverterTypeDxSolution.lift(
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_drillxmobile_fn_func_dx_hash(
