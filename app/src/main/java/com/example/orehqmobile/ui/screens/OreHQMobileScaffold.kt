@@ -32,40 +32,43 @@ import androidx.compose.ui.unit.sp
 
 // TODO: fix padding issue
 @Composable
-fun OreHQMobileScaffold(title: String, modifier: Modifier = Modifier, screenContent: @Composable () -> Unit) {
+fun OreHQMobileScaffold(title: String, displayTopBar: Boolean, modifier: Modifier = Modifier, screenContent: @Composable () -> Unit) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
     Scaffold(
         topBar = {
             Column(
                 modifier = Modifier.padding(top = statusBarPadding.calculateTopPadding())
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .height(40.dp)
-                        .fillMaxWidth()
-                        .background(Color.Black)
-                        .padding(start = 16.dp)
-                ) {
-                    Box {
-                        Icon(
-                            Icons.Default.Menu,
-                            contentDescription = null,
-                            tint = Color.White,
-                        )
-                        Text(
-                            text = title,
-                            style = TextStyle(
-                                color = Color.White,
-                            ),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                if (displayTopBar) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .height(40.dp)
+                            .fillMaxWidth()
+                            .background(Color.Black)
+                            .padding(start = 16.dp)
+                    ) {
+                        Box {
+                            Icon(
+                                Icons.Default.Menu,
+                                contentDescription = null,
+                                tint = Color.White,
+                            )
+                            Text(
+                                text = title,
+                                style = TextStyle(
+                                    color = Color.White,
+                                ),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
 
+                        }
                     }
+
                 }
             }
         },

@@ -39,7 +39,7 @@ interface IPoolRepository {
     suspend fun fetchPoolMultiplier(): Result<Double>
 }
 
-const val HOST_URL = "domainexpansion.tech"
+const val HOST_URL = "ec1ipse.me"
 const val STATS_HOST_URL = "domainexpansion.tech"
 
 class PoolRepository : IPoolRepository {
@@ -143,7 +143,7 @@ class PoolRepository : IPoolRepository {
         return try {
             val response: HttpResponse = client.get("https://$STATS_HOST_URL/pool/staked")
             if (response.status.value in 200..299) {
-                Result.success(response.bodyAsText().toDouble())
+                Result.success(response.bodyAsText().toDouble() / 100000000000)
             } else {
                 Result.failure(IOException("HTTP error ${response.status.value}"))
             }

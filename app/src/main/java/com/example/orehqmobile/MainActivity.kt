@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.example.orehqmobile.data.repositories.KeypairRepository
 import com.example.orehqmobile.ui.OreHQMobileApp
 import com.example.orehqmobile.ui.screens.home_screen.HomeScreen
 import com.example.orehqmobile.ui.theme.OreHQMobileTheme
@@ -37,13 +38,21 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableEdgeToEdge()
+
+        val keypairRepository = KeypairRepository(this);
+
+        val hasEncryptedKeypair = keypairRepository.encryptedKeypairExists();
+
+
         setContent {
             OreHQMobileTheme {
-                OreHQMobileApp()
+                OreHQMobileApp(
+                    hasEncryptedKeypair
+                )
             }
         }
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
     }
 }

@@ -14,14 +14,21 @@ import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import java.security.SecureRandom
 
+data class GeneratedKeypair (
+    val phrase: String,
+    val keypair: KeyPair
+)
+
 interface IKeypairRepository {
     suspend fun saveEncryptedKeypair(keypair: KeyPair, password: String)
     suspend fun loadEncryptedKeypair(password: String): KeyPair?
-    suspend fun generateNewKeypair(): KeyPair
+    fun generateNewKeypair(): KeyPair
+    fun generateNewKeypairWithPhrase(): GeneratedKeypair
+    fun encryptedKeypairExists(): Boolean
 }
 
 class KeypairRepository(private val context: Context) : IKeypairRepository {
-    private val fileName = "encrypted_keypair.bin"
+    private val fileName = "encrypted_test_keypair.bin"
 
     override suspend fun saveEncryptedKeypair(keypair: KeyPair, password: String) {
         val encryptedKeypair = EncryptedKeypair.fromKeyPair(keypair, password)
@@ -60,7 +67,7 @@ class KeypairRepository(private val context: Context) : IKeypairRepository {
         return encryptedKeypair.toKeyPair(password)
     }
 
-    override suspend fun generateNewKeypair(): KeyPair {
+    override fun generateNewKeypair(): KeyPair {
         val generator = Ed25519KeyPairGenerator()
         generator.init(Ed25519KeyGenerationParameters(SecureRandom()))
         val keyPair = generator.generateKeyPair()
@@ -70,6 +77,24 @@ class KeypairRepository(private val context: Context) : IKeypairRepository {
             Ed25519PublicKey(publicKey.encoded),
             Ed25519PrivateKey(privateKey.encoded)
         )
+    }
+
+    override fun generateNewKeypairWithPhrase(): GeneratedKeypair {
+        val generatedKey = uniffi.drillxmobile.dxGenerateKey()
+
+        val phrase = generatedKey.wordList;
+        val privateKeyBytes = generatedKey.keypair.sliceArray(0 until 32)
+        val publicKeyBytes = generatedKey.keypair.sliceArray(32 until generatedKey.keypair.size)
+
+        val privateKey = Ed25519PrivateKey(privateKeyBytes)
+        val publicKey = Ed25519PublicKey(publicKeyBytes)
+
+        return GeneratedKeypair(phrase, KeyPair(publicKey, privateKey))
+    }
+
+    override fun encryptedKeypairExists(): Boolean {
+        val file = File(context.filesDir, fileName)
+        return file.exists()
     }
 }
 

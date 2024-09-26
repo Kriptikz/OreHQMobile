@@ -29,7 +29,7 @@ fun HomeScreen(
     onDecreaseSelectedThreads: () -> Unit,
     onToggleMining: () -> Unit,
 ) {
-    OreHQMobileScaffold(title = "Home") {
+    OreHQMobileScaffold(title = "Home", displayTopBar = true) {
         val hashrate = homeUiState.hashRate
         val difficulty = homeUiState.difficulty
         val lastDifficulty = homeUiState.lastDifficulty
@@ -127,7 +127,7 @@ fun HomeScreenPreview() {
         HomeScreen(
             HomeUiState(
                 availableThreads = 1,
-                hashRate = 0.0,
+                hashRate = 0u,
                 difficulty = 0u,
                 lastDifficulty = 0u,
                 selectedThreads =  1,
@@ -138,6 +138,7 @@ fun HomeScreenPreview() {
                 poolBalance = 0.0,
                 topStake = 0.0,
                 poolMultiplier = 0.0,
+                isWebsocketConnected = false,
             ),
             onDecreaseSelectedThreads = {},
             onIncreaseSelectedThreads = {},
