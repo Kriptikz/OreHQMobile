@@ -45,7 +45,8 @@ fun SaveWithPasscodeScreen(
     saveWithPasscodeScreenState: SaveWithPasscodeScreenState,
     onNumberPress: (index: Int, value: Int) -> Unit,
     setCurrentIndex: (index: Int) -> Unit,
-    deletePasscodeValue: (index: Int) -> Unit
+    deletePasscodeValue: (index: Int) -> Unit,
+    onFinished: (passcode: IntArray) -> Unit,
 ) {
     OreHQMobileScaffold(title = "New Wallet", displayTopBar = false) {
         Column(
@@ -114,7 +115,9 @@ fun SaveWithPasscodeScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(
-                        onClick = { /* Handle Done action */ },
+                        onClick = {
+                            onFinished(saveWithPasscodeScreenState.passcode)
+                        },
                         modifier = Modifier
                             .size(80.dp)
                             .padding(4.dp)
@@ -199,6 +202,7 @@ fun SaveWithPasscodeScreenPreview() {
             onNumberPress = { _, _ -> {}},
             setCurrentIndex = { _ -> {}},
             deletePasscodeValue = { _ -> {}},
+            onFinished = {},
         )
     }
 }

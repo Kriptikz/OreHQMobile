@@ -1,22 +1,32 @@
 package com.example.orehqmobile.data.repositories
 
+import android.util.Log
 import com.example.orehqmobile.data.models.PUBLIC_KEY_LEN
 import com.example.orehqmobile.data.models.SIGNATURE_LEN
 import com.funkatronics.encoders.Base58
+import com.funkatronics.encoders.Base64
 import com.solana.signer.SolanaSigner
 import com.solana.transaction.Message
+import com.solana.transaction.Transaction
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
 
+const val LAMPORTS_PER_SOL: ULong = 1_000_000_000uL
+
 interface ISolanaRepository {
     fun base58Encode(byteArray: ByteArray): String
+    fun base64Encode(byteArray: ByteArray): String
+    fun base64Decode(str: String): ByteArray
     fun signMessage(message: ByteArray, keypairs: List<AsymmetricCipherKeyPair>): SignatureResult
     fun signTransaction(
         transaction: ByteArray,
         keypairs: List<AsymmetricCipherKeyPair>
     ): SignatureResult
+    fun getSolTransferTransaction(latestBlockhash: String, from: String, to: String, amount: ULong): Transaction?
+    fun solToLamports(sol_amount: Double): ULong
+    fun lamportsToSol(lamports_amount: ULong): Double
 }
 
 data class SignatureResult(
@@ -45,6 +55,14 @@ data class SignatureResult(
 class SolanaRepository : ISolanaRepository {
     override fun base58Encode(byteArray: ByteArray): String {
         return Base58.encodeToString(byteArray)
+    }
+
+    override fun base64Encode(byteArray: ByteArray): String {
+        return Base64.encodeToString(byteArray)
+    }
+
+    override fun base64Decode(str: String): ByteArray {
+        return Base64.decode(str)
     }
 
     override fun signTransaction(
@@ -119,6 +137,26 @@ class SolanaRepository : ISolanaRepository {
         }
 
         return SignatureResult(signedMessage, signedMessage.sliceArray(message.size until message.size + SIGNATURE_LEN))
+    }
+
+    override fun getSolTransferTransaction(latestBlockhash: String, from: String, to: String, amount: ULong): Transaction? {
+        try {
+            val encodedTxn = uniffi.orehqmobileffi.getTransferLamportsTransaction(latestBlockhash, from, to, amount)
+            var decodedTxn = Base64.decode(encodedTxn)
+            val txn = Transaction.from(decodedTxn)
+            return txn
+        } catch (e: uniffi.orehqmobileffi.OreHqMobileFfiException) {
+            Log.e("SolanaRepository", "Failed to generate sol transfer txn: $e")
+            return null
+        }
+    }
+
+    override fun solToLamports(sol_amount: Double): ULong {
+        return (sol_amount * LAMPORTS_PER_SOL.toDouble()).toULong()
+    }
+
+    override fun lamportsToSol(lamports_amount: ULong): Double {
+        return (lamports_amount.toDouble() / LAMPORTS_PER_SOL.toDouble())
     }
 
     private fun readCompactArrayLen(b: ByteArray, off: Int): Pair<Int, Int> {

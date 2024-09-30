@@ -136,7 +136,6 @@ fun CreatedWalletScreenPreview() {
             createdWalletScreenState = CreatedWalletScreenState(
                 phrase = "",
                 pubkey = "",
-                keypair = null
             ),
             onClickContinue = {}
         )

@@ -18,6 +18,7 @@ import com.example.orehqmobile.data.models.ServerMessage
 import com.example.orehqmobile.data.models.toLittleEndianByteArray
 import com.funkatronics.encoders.Base58
 import com.funkatronics.encoders.Base64
+import com.solana.transaction.blockhash
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -28,7 +29,7 @@ import kotlinx.coroutines.withContext
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
-import uniffi.drillxmobile.DxSolution
+import uniffi.orehqmobileffi.DxSolution
 
 data class HomeUiState(
     var availableThreads: Int,
@@ -37,6 +38,7 @@ data class HomeUiState(
     var lastDifficulty: UInt,
     var selectedThreads: Int,
     var isMiningEnabled: Boolean,
+    var solBalance: Double,
     var claimableBalance: Double,
     var walletTokenBalance: Double,
     var activeMiners: Int,
@@ -44,6 +46,8 @@ data class HomeUiState(
     var poolMultiplier: Double,
     var topStake: Double,
     var isWebsocketConnected: Boolean,
+    var isSignedUp: Boolean,
+    var isLoadingUi: Boolean,
 )
 
 @OptIn(ExperimentalStdlibApi::class)
@@ -54,6 +58,7 @@ class HomeScreenViewModel(
     private val keypairRepository: IKeypairRepository,
 ) : ViewModel() {
     private var keypair: AsymmetricCipherKeyPair? = null
+    private var poolAuthorityPubkey: String? = null
     private var isFetchingUiState = false
     var homeUiState: HomeUiState by mutableStateOf(
         HomeUiState(
@@ -64,12 +69,15 @@ class HomeScreenViewModel(
             selectedThreads =  1,
             isMiningEnabled = false,
             claimableBalance = 0.0,
+            solBalance = 0.0,
             walletTokenBalance = 0.0,
             activeMiners = 0,
             poolBalance = 0.0,
             poolMultiplier = 0.0,
             topStake = 0.0,
             isWebsocketConnected = false,
+            isSignedUp = false,
+            isLoadingUi = true,
         )
     )
         private set
@@ -78,10 +86,15 @@ class HomeScreenViewModel(
         val runtimeAvailableThreads = Runtime.getRuntime().availableProcessors()
         homeUiState = homeUiState.copy(availableThreads = runtimeAvailableThreads)
 
-        // Fetch miner claimable rewards every 1 minute
+        loadPoolAuthorityPubkey()
+
         viewModelScope.launch(Dispatchers.IO) {
+            loadKeypair("123456")
+            fetchUiState()
+
+            // Fetch miner claimable rewards every 1 minute
             while (true) {
-                if (keypair != null) {
+                if (keypair != null && homeUiState.isSignedUp) {
                     val publicKey = Base58.encodeToString((keypair!!.public as Ed25519PublicKeyParameters).encoded)
                     val balanceRewardsResult = poolRepository.fetchMinerRewards(publicKey)
                     balanceRewardsResult.fold(
@@ -102,76 +115,99 @@ class HomeScreenViewModel(
         keypair = newKeypair
     }
 
-    suspend fun loadKeypair(password: String) {
-        var loadedKeypair = keypairRepository.loadEncryptedKeypair(password)
-        if (loadedKeypair == null) {
-            loadedKeypair = keypairRepository.generateNewKeypair()
-            keypairRepository.saveEncryptedKeypair(loadedKeypair!!, password)
+    fun loadPoolAuthorityPubkey() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val poolAuthPubkeyResult = poolRepository.fetchPoolAuthorityPubkey()
+            poolAuthPubkeyResult.fold(
+                onSuccess = { pubkey ->
+                    withContext(Dispatchers.Main) {
+                        poolAuthorityPubkey = pubkey
+                    }
+                },
+                onFailure = { error ->
+                    Log.e("HomeScreenViewModel", "Error fetching wallet rewards balance", error)
+                }
+            )
         }
+    }
 
-//        val publicKey = loadedKeypair.public as Ed25519PublicKey
-//        Log.d("HomeScreenViewModel", "Public key: $publicKey")
+    suspend fun loadKeypair(password: String): Boolean {
+        var loadedKeypair = keypairRepository.loadEncryptedKeypair(password) ?: return false
 
         val privateKey = Ed25519PrivateKeyParameters(loadedKeypair.private.encoded, 0)
         keypair = AsymmetricCipherKeyPair(privateKey.generatePublicKey(), privateKey)
+
+        return true
     }
 
-    suspend fun connectToWebsocket() {
-        if (!homeUiState.isWebsocketConnected) {
-            homeUiState = homeUiState.copy(isWebsocketConnected = true)
-            val result = poolRepository.fetchTimestamp()
-            result.fold(
-                onSuccess = { timestamp ->
-                    Log.d("HomeScreenViewModel", "Fetched timestamp: $timestamp")
-                    val tsBytes = timestamp.toLittleEndianByteArray()
-                    val signatureResult = solanaRepository.signMessage(tsBytes, listOf(keypair!!))
+    fun connectToWebsocket() {
+        if (!homeUiState.isWebsocketConnected && homeUiState.isSignedUp) {
+            viewModelScope.launch(Dispatchers.IO) {
+                homeUiState = homeUiState.copy(isWebsocketConnected = true)
+                val result = poolRepository.fetchTimestamp()
+                result.fold(
+                    onSuccess = { timestamp ->
+                        Log.d("HomeScreenViewModel", "Fetched timestamp: $timestamp")
+                        val tsBytes = timestamp.toLittleEndianByteArray()
 
-                    val sig = signatureResult.signature
-                    val publicKey = (keypair!!.public as Ed25519PublicKeyParameters).encoded
+                        if (keypair != null) {
+                            Log.d("HomeScreenViewModel", "Keypair is not null")
+                        } else {
+                            Log.d("HomeScreenViewModel", "Keypair is null")
 
-                    //val privateKey = (keypair!!.private as Ed25519PrivateKeyParameters).encoded
-
-                    // Connect to WebSocket
-                    viewModelScope.launch(Dispatchers.IO) {
-                        try {
-                            poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), Base58.encodeToString(publicKey)
-                            ).collect { serverMessage ->
-                                // Handle incoming WebSocket data
-                                Log.d("HomeScreenViewModel", "Received WebSocket data: $serverMessage")
-                                // Process the data as needed
-                                when (serverMessage) {
-                                    is ServerMessage.StartMining -> handleStartMining(serverMessage)
-                                    is ServerMessage.PoolSubmissionResult -> handlePoolSubmissionResult(serverMessage)
-                                }
-                            }
-
-                            homeUiState = homeUiState.copy(isWebsocketConnected = false)
-                        } catch (e: Exception) {
-                            homeUiState = homeUiState.copy(isWebsocketConnected = false)
-                            Log.e("HomeScreenViewModel", "WebSocket error: ${e.message}")
-                            when (e) {
-                                is io.ktor.client.plugins.ClientRequestException -> {
-                                    val errorBody = e.response.bodyAsText()
-                                    Log.e("HomeScreenViewModel", "Error body: $errorBody")
-                                }
-                                is io.ktor.client.plugins.ServerResponseException -> {
-                                    val errorBody = e.response.bodyAsText()
-                                    Log.e("HomeScreenViewModel", "Error body: $errorBody")
-                                }
-                                else -> {
-                                    Log.e("HomeScreenViewModel", "Unexpected error", e)
-                                }
-                            }
                         }
+                        val signatureResult = solanaRepository.signMessage(tsBytes, listOf(keypair!!))
+
+                        val sig = signatureResult.signature
+                        val publicKey = (keypair!!.public as Ed25519PublicKeyParameters).encoded
+
+                        //val privateKey = (keypair!!.private as Ed25519PrivateKeyParameters).encoded
+
+                        // Connect to WebSocket
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), Base58.encodeToString(publicKey)
+                                ).collect { serverMessage ->
+                                    // Handle incoming WebSocket data
+                                    Log.d("HomeScreenViewModel", "Received WebSocket data: $serverMessage")
+                                    // Process the data as needed
+                                    when (serverMessage) {
+                                        is ServerMessage.StartMining -> handleStartMining(serverMessage)
+                                        is ServerMessage.PoolSubmissionResult -> handlePoolSubmissionResult(serverMessage)
+                                    }
+                                }
+
+                                homeUiState = homeUiState.copy(isWebsocketConnected = false)
+                            } catch (e: Exception) {
+                                homeUiState = homeUiState.copy(isWebsocketConnected = false)
+                                Log.e("HomeScreenViewModel", "WebSocket error: ${e.message}")
+                                when (e) {
+                                    is io.ktor.client.plugins.ClientRequestException -> {
+                                        val errorBody = e.response.bodyAsText()
+                                        Log.e("HomeScreenViewModel", "Error body: $errorBody")
+                                    }
+                                    is io.ktor.client.plugins.ServerResponseException -> {
+                                        val errorBody = e.response.bodyAsText()
+                                        Log.e("HomeScreenViewModel", "Error body: $errorBody")
+                                    }
+                                    else -> {
+                                        Log.e("HomeScreenViewModel", "Unexpected error", e)
+                                    }
+                                }
+                            }
+
+                            homeUiState = homeUiState.copy(isWebsocketConnected = false)
+                        }
+
+
+                    },
+                    onFailure = { error ->
+                        homeUiState = homeUiState.copy(isWebsocketConnected = false)
+                        Log.e("HomeScreenViewModel", "Error fetching timestamp", error)
                     }
+                )
 
-
-                },
-                onFailure = { error ->
-                    homeUiState = homeUiState.copy(isWebsocketConnected = false)
-                    Log.e("HomeScreenViewModel", "Error fetching timestamp", error)
-                }
-            )
+            }
         }
     }
 
@@ -184,6 +220,17 @@ class HomeScreenViewModel(
                     try {
                         // Fetch wallet token balance
                         val publicKey = Base58.encodeToString((keypair!!.public as Ed25519PublicKeyParameters).encoded)
+
+                        val solBalanceResult = poolRepository.fetchSolBalance(publicKey)
+                        solBalanceResult.fold(
+                            onSuccess = { balance ->
+                                homeUiState = homeUiState.copy(solBalance = balance)
+                            },
+                            onFailure = { error ->
+                                Log.e("HomeScreenViewModel", "Error fetching sol balance", error)
+                            }
+                        )
+
                         val balanceResult = poolRepository.fetchMinerBalance(publicKey)
                         balanceResult.fold(
                             onSuccess = { balance ->
@@ -191,6 +238,21 @@ class HomeScreenViewModel(
                             },
                             onFailure = { error ->
                                 Log.e("HomeScreenViewModel", "Error fetching wallet token balance", error)
+                            }
+                        )
+
+                        // Fetch miner claimable rewards
+                        val balanceRewardsResult = poolRepository.fetchMinerRewards(publicKey)
+                        balanceRewardsResult.fold(
+                            onSuccess = { balance ->
+                                homeUiState = homeUiState.copy(
+                                    claimableBalance = balance,
+                                    isSignedUp = true,
+                                )
+                            },
+                            onFailure = { error ->
+                                homeUiState = homeUiState.copy(isSignedUp = false)
+                                Log.e("HomeScreenViewModel", "Error fetching wallet rewards balance", error)
                             }
                         )
 
@@ -204,16 +266,6 @@ class HomeScreenViewModel(
                             }
                         )
 
-                        // Fetch miner claimable rewards
-                        val balanceRewardsResult = poolRepository.fetchMinerRewards(publicKey)
-                        balanceRewardsResult.fold(
-                            onSuccess = { balance ->
-                                homeUiState = homeUiState.copy(claimableBalance = balance)
-                            },
-                            onFailure = { error ->
-                                Log.e("HomeScreenViewModel", "Error fetching wallet rewards balance", error)
-                            }
-                        )
 
                         Log.d("HomeScreenViewModel", "Fetching pool balance")
                         val poolBalanceResult = poolRepository.fetchPoolBalance()
@@ -236,6 +288,8 @@ class HomeScreenViewModel(
                                 Log.e("HomeScreenViewModel", "Error fetching pool multiplier", error)
                             }
                         )
+
+                        homeUiState.isLoadingUi = false
 
                         // TODO add top stake fetch
 
@@ -363,7 +417,7 @@ class HomeScreenViewModel(
                         val nonceForThisJob = currentNonce
                         currentNonce += noncesPerThread
                         async(Dispatchers.Default) {
-                            uniffi.drillxmobile.dxHash(challenge, currentBatchMaxRuntime, nonceForThisJob, lastNonce)
+                            uniffi.orehqmobileffi.dxHash(challenge, currentBatchMaxRuntime, nonceForThisJob, lastNonce)
                         }
                     }
                     val results = jobs.awaitAll()
@@ -442,6 +496,40 @@ class HomeScreenViewModel(
             topStake = poolSubmissionResult.topStake,
             poolMultiplier = poolSubmissionResult.multiplier,
         )
+    }
+
+    fun signUpClicked() {
+        Log.d("HomeScreenViewModel", "Sign Up Clicked!")
+        viewModelScope.launch(Dispatchers.IO) {
+            if (keypair != null) {
+                    val latestBlockhash = poolRepository.fetchLatestBlockhash()
+                    latestBlockhash.fold(
+                        onSuccess = { latestBlockhash ->
+                            val publicKey = solanaRepository.base58Encode((keypair!!.public as Ed25519PublicKeyParameters).encoded)
+                            val txn = solanaRepository.getSolTransferTransaction(latestBlockhash, publicKey, poolAuthorityPubkey!!, 1_000_000uL)
+                            if (txn != null) {
+                                var signedTxn = solanaRepository.signTransaction(txn.serialize(), listOf(keypair!!))
+                                var signedTxnStr = solanaRepository.base64Encode(signedTxn.signedPayload)
+                                val signedUp = poolRepository.signup(publicKey, signedTxnStr)
+                                signedUp.fold(
+                                    onSuccess = { _successResult ->
+                                        Log.d("HomeScreenViewModel", "Successfully signed up!")
+                                    },
+                                    onFailure = { error ->
+                                        Log.e("HomeScreenViewModel", "Error processing signup request", error)
+                                    }
+                                )
+                            } else {
+                                Log.e("HomeScreenViewModel", "Failed to getSolTransferTransaction for signup.")
+                            }
+
+                        },
+                        onFailure = { error ->
+                            Log.e("HomeScreenViewModel", "Error fetching latest blockhash", error)
+                        }
+                    )
+            }
+        }
     }
 
     fun toggleMining() {

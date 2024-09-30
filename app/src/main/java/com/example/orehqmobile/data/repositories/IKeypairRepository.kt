@@ -80,7 +80,7 @@ class KeypairRepository(private val context: Context) : IKeypairRepository {
     }
 
     override fun generateNewKeypairWithPhrase(): GeneratedKeypair {
-        val generatedKey = uniffi.drillxmobile.dxGenerateKey()
+        val generatedKey = uniffi.orehqmobileffi.generateKey()
 
         val phrase = generatedKey.wordList;
         val privateKeyBytes = generatedKey.keypair.sliceArray(0 until 32)

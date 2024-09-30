@@ -1,18 +1,21 @@
 package com.example.orehqmobile.ui.screens.save_with_passcode_screen
 
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.navigation.NavController
 import com.example.orehqmobile.OreHQMobileApplication
 import com.example.orehqmobile.data.repositories.IKeypairRepository
-import com.example.orehqmobile.data.repositories.IPoolRepository
-import com.example.orehqmobile.data.repositories.ISolanaRepository
-import com.example.orehqmobile.ui.screens.home_screen.HomeUiState
+import com.example.orehqmobile.ui.screens.home_screen.HomeScreenViewModel
+import com.example.orehqmobile.ui.screens.new_created_wallet_screen.CreatedWalletScreenViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class SaveWithPasscodeScreenState(
     var selectedIndex: Int,
@@ -70,6 +73,34 @@ class SaveWithPasscodeScreenViewModel(
             passcode = p
         )
 
+    }
+
+    fun finish(passcode: IntArray, navController: NavController, homeScreenViewModel: HomeScreenViewModel, createdWalletScreenViewModel: CreatedWalletScreenViewModel) {
+        var passcodeStr = ""
+        for (pc in passcode) {
+            if (pc == -1) {
+                // TODO: handle not set value
+            } else {
+                passcodeStr += pc.toString()
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            createdWalletScreenViewModel.saveWallet(passcodeStr)
+
+            while (true) {
+                if (keypairRepository.encryptedKeypairExists()) {
+                    homeScreenViewModel.loadKeypair(passcodeStr)
+                    homeScreenViewModel.connectToWebsocket()
+                    homeScreenViewModel.fetchUiState()
+                    withContext(Dispatchers.Main) {
+                        navController.navigate("homeScreen")
+                    }
+
+                    break;
+                }
+            }
+        }
     }
 
     companion object {

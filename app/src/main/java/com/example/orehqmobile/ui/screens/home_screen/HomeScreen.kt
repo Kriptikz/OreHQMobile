@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,21 +29,10 @@ fun HomeScreen(
     onIncreaseSelectedThreads: () -> Unit,
     onDecreaseSelectedThreads: () -> Unit,
     onToggleMining: () -> Unit,
+    onClickSignup: () -> Unit,
+    onConnectToWebsocket: () -> Unit,
 ) {
     OreHQMobileScaffold(title = "Home", displayTopBar = true) {
-        val hashrate = homeUiState.hashRate
-        val difficulty = homeUiState.difficulty
-        val lastDifficulty = homeUiState.lastDifficulty
-        val availableThreads = homeUiState.availableThreads
-        val selectedThreads = homeUiState.selectedThreads
-        val isMiningEnabled = homeUiState.isMiningEnabled
-        val claimableBalance = homeUiState.claimableBalance
-        val walletTokenBalance = homeUiState.walletTokenBalance
-        val activeMiners = homeUiState.activeMiners
-        val poolBalance = homeUiState.poolBalance
-        val topStake = homeUiState.topStake
-        val poolMultiplier = homeUiState.poolMultiplier
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -50,72 +40,25 @@ fun HomeScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Wallet ORE Balance
-            Text(
-                text = "Wallet: $walletTokenBalance ORE",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 32.dp)
-            )
-            // Mining status
-            Text(
-                text = if (isMiningEnabled) "Mining..." else "Stopped",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            Text(text = "Active Miners: $activeMiners", modifier = Modifier.padding(bottom = 8.dp))
-            Text(
-                text = "Pool Balance: ${String.format("%.11f", poolBalance)} ORE",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 32.dp)
-            )
-            Text(
-                text = "Top Stake: ${String.format("%.11f", topStake)} ORE",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 32.dp)
-            )
-            Text(
-                text = "Pool Multiplier: ${String.format("%.2f", poolMultiplier)}x",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 32.dp, bottom = 32.dp)
-            )
-
-            Text(text = "Hashpower: $hashrate", modifier = Modifier.padding(bottom = 8.dp))
-            Text(text = "Last Difficulty: $lastDifficulty", modifier = Modifier.padding(bottom = 16.dp))
-            Text(text = "Difficulty: $difficulty", modifier = Modifier.padding(bottom = 16.dp))
-
-            // Thread count selector
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 16.dp)
-            ) {
-                Text(text = "Threads:", modifier = Modifier.padding(end = 8.dp))
-                IconButton(onClick = onDecreaseSelectedThreads) {
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease threads")
+            if (homeUiState.isLoadingUi) {
+                CircularProgressIndicator()
+            } else {
+                if (homeUiState.isSignedUp) {
+                    MiningScreen(
+                        homeUiState = homeUiState,
+                        onIncreaseSelectedThreads,
+                        onDecreaseSelectedThreads,
+                        onToggleMining,
+                        onConnectToWebsocket,
+                    )
+                } else {
+                    SignUpScreen(
+                        homeUiState = homeUiState,
+                        onClickSignUp = onClickSignup,
+                    )
                 }
-                Text(
-                    text = selectedThreads.toString(),
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-                IconButton(onClick = onIncreaseSelectedThreads) {
-                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase threads")
-                }
-                Text(text = "/ $availableThreads", modifier = Modifier.padding(start = 8.dp))
-            }
 
-            // Mining toggle button
-            Button(
-                onClick = onToggleMining,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (isMiningEnabled) "Stop Mining" else "Start Mining")
             }
-
-            Text(
-                text = "Claimable: ${String.format("%.11f", claimableBalance)} ORE",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 32.dp)
-            )
         }
     }
 }
@@ -133,16 +76,141 @@ fun HomeScreenPreview() {
                 selectedThreads =  1,
                 isMiningEnabled = false,
                 claimableBalance = 0.0,
+                solBalance = 0.0,
                 walletTokenBalance = 0.0,
                 activeMiners = 0,
                 poolBalance = 0.0,
                 topStake = 0.0,
                 poolMultiplier = 0.0,
                 isWebsocketConnected = false,
+                isSignedUp = false,
+                isLoadingUi = false,
             ),
             onDecreaseSelectedThreads = {},
             onIncreaseSelectedThreads = {},
             onToggleMining = {},
+            onClickSignup = {},
+            onConnectToWebsocket = {},
         )
+    }
+}
+
+@Composable
+fun MiningScreen(
+    homeUiState: HomeUiState,
+    onIncreaseSelectedThreads: () -> Unit,
+    onDecreaseSelectedThreads: () -> Unit,
+    onToggleMining: () -> Unit,
+    onConnectToWebsocket: () -> Unit,
+) {
+    val hashrate = homeUiState.hashRate
+    val difficulty = homeUiState.difficulty
+    val lastDifficulty = homeUiState.lastDifficulty
+    val availableThreads = homeUiState.availableThreads
+    val selectedThreads = homeUiState.selectedThreads
+    val isMiningEnabled = homeUiState.isMiningEnabled
+    val claimableBalance = homeUiState.claimableBalance
+    val walletTokenBalance = homeUiState.walletTokenBalance
+    val activeMiners = homeUiState.activeMiners
+    val poolBalance = homeUiState.poolBalance
+    val topStake = homeUiState.topStake
+    val poolMultiplier = homeUiState.poolMultiplier
+    val isWebsocketConnected = homeUiState.isWebsocketConnected
+
+    // Wallet ORE Balance
+    Text(
+        text = "Wallet: $walletTokenBalance ORE",
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 32.dp)
+    )
+    // Mining status
+    Text(
+        text = if (isMiningEnabled) "Mining..." else "Stopped",
+        style = MaterialTheme.typography.headlineSmall,
+        modifier = Modifier.padding(bottom = 16.dp)
+    )
+
+    Text(
+        text = if (isWebsocketConnected) "WS: Connected" else "WS: Not Connected",
+        style = MaterialTheme.typography.headlineSmall,
+        modifier = Modifier.padding(bottom = 16.dp)
+    )
+
+    Text(text = "Active Miners: $activeMiners", modifier = Modifier.padding(bottom = 8.dp))
+    Text(
+        text = "Pool Balance: ${String.format("%.11f", poolBalance)} ORE",
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 32.dp)
+    )
+    Text(
+        text = "Top Stake: ${String.format("%.11f", topStake)} ORE",
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 32.dp)
+    )
+    Text(
+        text = "Pool Multiplier: ${String.format("%.2f", poolMultiplier)}x",
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 32.dp, bottom = 32.dp)
+    )
+
+    Text(text = "Hashpower: $hashrate", modifier = Modifier.padding(bottom = 8.dp))
+    Text(text = "Last Difficulty: $lastDifficulty", modifier = Modifier.padding(bottom = 16.dp))
+    Text(text = "Difficulty: $difficulty", modifier = Modifier.padding(bottom = 16.dp))
+
+    // Thread count selector
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(bottom = 16.dp)
+    ) {
+        Text(text = "Threads:", modifier = Modifier.padding(end = 8.dp))
+        IconButton(onClick = onDecreaseSelectedThreads) {
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease threads")
+        }
+        Text(
+            text = selectedThreads.toString(),
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+        IconButton(onClick = onIncreaseSelectedThreads) {
+            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase threads")
+        }
+        Text(text = "/ $availableThreads", modifier = Modifier.padding(start = 8.dp))
+    }
+
+    // Mining toggle button
+    if (isWebsocketConnected) {
+        Button(
+            onClick = onToggleMining,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (isMiningEnabled) "Stop Mining" else "Start Mining")
+        }
+    } else {
+        Button(
+            onClick = onConnectToWebsocket,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Connect")
+        }
+    }
+
+    Text(
+        text = "Claimable: ${String.format("%.11f", claimableBalance)} ORE",
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 32.dp)
+    )
+
+}
+
+@Composable
+fun SignUpScreen(
+    homeUiState: HomeUiState,
+    onClickSignUp: () -> Unit,
+) {
+    Text("Sol Balance: ${homeUiState.solBalance}")
+    Button(
+        onClick = onClickSignUp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Sign Up")
     }
 }

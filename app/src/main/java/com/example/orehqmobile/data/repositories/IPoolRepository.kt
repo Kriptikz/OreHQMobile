@@ -11,6 +11,8 @@ import io.ktor.client.plugins.websocket.wss
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
@@ -37,6 +39,11 @@ interface IPoolRepository {
     suspend fun fetchActiveMinersCount(): Result<Int>
     suspend fun fetchPoolBalance(): Result<Double>
     suspend fun fetchPoolMultiplier(): Result<Double>
+    suspend fun fetchPoolAuthorityPubkey(): Result<String>
+    suspend fun fetchLatestBlockhash(): Result<String>
+    suspend fun fetchSolBalance(publicKey: String): Result<Double>
+    suspend fun fetchSignupFee(): Result<Double>
+    suspend fun signup(publicKey: String, signedTx: String): Result<String>
 }
 
 const val HOST_URL = "ec1ipse.me"
@@ -157,6 +164,74 @@ class PoolRepository : IPoolRepository {
             val response: HttpResponse = client.get("https://$STATS_HOST_URL/stake-multiplier")
             if (response.status.value in 200..299) {
                 Result.success(response.bodyAsText().toDouble())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun fetchPoolAuthorityPubkey(): Result<String> {
+        return try {
+            val response: HttpResponse = client.get("https://$HOST_URL/pool/authority/pubkey")
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun fetchSignupFee(): Result<Double> {
+        return try {
+            val response: HttpResponse = client.get("https://$STATS_HOST_URL/signup-fee")
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText().toDouble())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun fetchSolBalance(publicKey: String): Result<Double> {
+        return try {
+            val response: HttpResponse = client.get("https://$STATS_HOST_URL/sol-balance?pubkey=$publicKey")
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText().toDouble())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun fetchLatestBlockhash(): Result<String> {
+        return try {
+            val response: HttpResponse = client.get("https://$HOST_URL/latest-blockhash")
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun signup(publicKey: String, signedTx: String): Result<String> {
+        return try {
+            Log.d("PoolRepository", "Signup with pubkey: $publicKey")
+            val response: HttpResponse = client.post("https://$HOST_URL/signup?pubkey=$publicKey") {
+                setBody(signedTx)
+            }
+            if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText())
             } else {
                 Result.failure(IOException("HTTP error ${response.status.value}"))
             }

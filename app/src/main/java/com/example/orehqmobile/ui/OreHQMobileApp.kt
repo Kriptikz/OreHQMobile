@@ -37,6 +37,8 @@ fun OreHQMobileApp(
                 onIncreaseSelectedThreads = { homeScreenViewModel.increaseSelectedThreads() },
                 onDecreaseSelectedThreads = { homeScreenViewModel.decreaseSelectedThreads() },
                 onToggleMining = { homeScreenViewModel.toggleMining() },
+                onClickSignup = { homeScreenViewModel.signUpClicked() },
+                onConnectToWebsocket = { homeScreenViewModel.connectToWebsocket() }
             )
         }
         composable("newWalletStartScreen") {
@@ -66,6 +68,9 @@ fun OreHQMobileApp(
                 },
                 deletePasscodeValue = { index ->
                     saveWithPasscodeScreenViewModel.deletePasscodeValue(index)
+                },
+                onFinished = { passcode ->
+                    saveWithPasscodeScreenViewModel.finish(passcode, navController, homeScreenViewModel, createdWalletScreenViewModel)
                 }
             )
         }
