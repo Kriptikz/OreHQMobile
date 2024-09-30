@@ -1,4 +1,4 @@
-package com.example.orehqmobile.ui.screens.save_with_passcode_screen
+package com.example.orehqmobile.ui.screens.unlock_screen
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,33 +17,36 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-data class SaveWithPasscodeScreenState(
+data class UnlockScreenState(
     var selectedIndex: Int,
     var passcode: IntArray,
 )
 
-class SaveWithPasscodeScreenViewModel(
+class UnlockScreenViewModel(
+    application: OreHQMobileApplication,
     private val keypairRepository: IKeypairRepository,
 ) : ViewModel() {
-    var saveWithPasscodeScreenState: SaveWithPasscodeScreenState by mutableStateOf(
-        SaveWithPasscodeScreenState(
+    var unlockScreenState: UnlockScreenState by mutableStateOf(
+        UnlockScreenState(
             selectedIndex = 0,
             passcode = intArrayOf(-1, -1, -1, -1, -1, -1)
         )
     )
         private set
 
-    fun setPasscodeValue(index: Int, value: Int) {
-        var p = saveWithPasscodeScreenState.passcode.clone()
+    fun setPasscodeValue(index: Int, value: Int, navController: NavController, homeScreenViewModel: HomeScreenViewModel) {
+        var p = unlockScreenState.passcode.clone()
 
         p[index] = value
 
         var newIndex = 5
-        if (saveWithPasscodeScreenState.selectedIndex < 5) {
-            newIndex = saveWithPasscodeScreenState.selectedIndex + 1
+        if (unlockScreenState.selectedIndex < 5) {
+            newIndex = unlockScreenState.selectedIndex + 1
+        } else {
+            finish(p, navController, homeScreenViewModel)
         }
 
-        saveWithPasscodeScreenState = saveWithPasscodeScreenState.copy(
+        unlockScreenState = unlockScreenState.copy(
             selectedIndex = newIndex,
             passcode = p
         )
@@ -51,30 +54,30 @@ class SaveWithPasscodeScreenViewModel(
 
     fun setSelectedIndex(newIndex: Int) {
         if (newIndex <= 5) {
-            saveWithPasscodeScreenState = saveWithPasscodeScreenState.copy(
+            unlockScreenState = unlockScreenState.copy(
                 selectedIndex = newIndex
             )
         }
     }
 
     fun deletePasscodeValue(index: Int) {
-        var p = saveWithPasscodeScreenState.passcode.clone()
+        var p = unlockScreenState.passcode.clone()
 
         p[index] = -1
 
         var newIndex = 0
-        if (saveWithPasscodeScreenState.selectedIndex > 0) {
-            newIndex = saveWithPasscodeScreenState.selectedIndex - 1
+        if (unlockScreenState.selectedIndex > 0) {
+            newIndex = unlockScreenState.selectedIndex - 1
         }
 
-        saveWithPasscodeScreenState = saveWithPasscodeScreenState.copy(
+        unlockScreenState = unlockScreenState.copy(
             selectedIndex = newIndex,
             passcode = p
         )
 
     }
 
-    fun finish(passcode: IntArray, navController: NavController, homeScreenViewModel: HomeScreenViewModel, createdWalletScreenViewModel: CreatedWalletScreenViewModel) {
+    fun finish(passcode: IntArray, navController: NavController, homeScreenViewModel: HomeScreenViewModel) {
         var passcodeStr = ""
         for (pc in passcode) {
             if (pc == -1) {
@@ -85,18 +88,11 @@ class SaveWithPasscodeScreenViewModel(
         }
 
         viewModelScope.launch(Dispatchers.IO) {
-            createdWalletScreenViewModel.saveWallet(passcodeStr)
-
-            while (true) {
-                if (keypairRepository.encryptedKeypairExists()) {
-                    homeScreenViewModel.loadKeypair(passcodeStr)
-                    homeScreenViewModel.connectToWebsocket()
-                    homeScreenViewModel.fetchUiState()
-                    withContext(Dispatchers.Main) {
-                        navController.navigate("homeScreen")
-                    }
-
-                    break;
+            if (homeScreenViewModel.loadKeypair(passcodeStr)) {
+                homeScreenViewModel.connectToWebsocket()
+                homeScreenViewModel.fetchUiState()
+                withContext(Dispatchers.Main) {
+                    navController.navigate("homeScreen")
                 }
             }
         }
@@ -108,7 +104,8 @@ class SaveWithPasscodeScreenViewModel(
                 val application =
                     (this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as OreHQMobileApplication)
                 val keypairRepository = application.container.keypairRepository
-                SaveWithPasscodeScreenViewModel(
+                UnlockScreenViewModel(
+                    application = application,
                     keypairRepository = keypairRepository,
                 )
             }

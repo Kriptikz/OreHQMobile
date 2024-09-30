@@ -89,9 +89,6 @@ class HomeScreenViewModel(
         loadPoolAuthorityPubkey()
 
         viewModelScope.launch(Dispatchers.IO) {
-            loadKeypair("123456")
-            fetchUiState()
-
             // Fetch miner claimable rewards every 1 minute
             while (true) {
                 if (keypair != null && homeUiState.isSignedUp) {
@@ -196,13 +193,19 @@ class HomeScreenViewModel(
                                 }
                             }
 
-                            homeUiState = homeUiState.copy(isWebsocketConnected = false)
+                            homeUiState = homeUiState.copy(
+                                isWebsocketConnected = false,
+                                isMiningEnabled = false,
+                            )
                         }
 
 
                     },
                     onFailure = { error ->
-                        homeUiState = homeUiState.copy(isWebsocketConnected = false)
+                        homeUiState = homeUiState.copy(
+                            isWebsocketConnected = false,
+                            isMiningEnabled = false,
+                        )
                         Log.e("HomeScreenViewModel", "Error fetching timestamp", error)
                     }
                 )
@@ -460,7 +463,9 @@ class HomeScreenViewModel(
                     }
                 }
 
-                sendReadyMessage()
+                if (homeUiState.isMiningEnabled) {
+                    sendReadyMessage()
+                }
                 // reset best diff
                 homeUiState = homeUiState.copy(
                     difficulty = 0u,

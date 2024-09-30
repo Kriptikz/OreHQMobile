@@ -14,6 +14,8 @@ import com.example.orehqmobile.ui.screens.new_wallet_start_screen.NewWalletScree
 import com.example.orehqmobile.ui.screens.new_wallet_start_screen.NewWalletStartScreenViewModel
 import com.example.orehqmobile.ui.screens.save_with_passcode_screen.SaveWithPasscodeScreen
 import com.example.orehqmobile.ui.screens.save_with_passcode_screen.SaveWithPasscodeScreenViewModel
+import com.example.orehqmobile.ui.screens.unlock_screen.UnlockScreen
+import com.example.orehqmobile.ui.screens.unlock_screen.UnlockScreenViewModel
 
 @Composable
 fun OreHQMobileApp(
@@ -21,11 +23,12 @@ fun OreHQMobileApp(
     homeScreenViewModel: HomeScreenViewModel = viewModel(factory = HomeScreenViewModel.Factory),
     createdWalletScreenViewModel: CreatedWalletScreenViewModel = viewModel(factory = CreatedWalletScreenViewModel.Factory),
     saveWithPasscodeScreenViewModel: SaveWithPasscodeScreenViewModel = viewModel(factory = SaveWithPasscodeScreenViewModel.Factory),
+    unlockScreenViewModel: UnlockScreenViewModel = viewModel(factory = UnlockScreenViewModel.Factory),
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
     val startDestination = if(hasEncryptedKey) {
-        "homeScreen"
+        "unlockScreen"
     } else {
         "newWalletStartScreen"
     }
@@ -71,6 +74,23 @@ fun OreHQMobileApp(
                 },
                 onFinished = { passcode ->
                     saveWithPasscodeScreenViewModel.finish(passcode, navController, homeScreenViewModel, createdWalletScreenViewModel)
+                }
+            )
+        }
+        composable("unlockScreen") {
+            UnlockScreen(
+                unlockScreenState = unlockScreenViewModel.unlockScreenState,
+                onNumberPress = { index, value ->
+                    unlockScreenViewModel.setPasscodeValue(index, value, navController, homeScreenViewModel)
+                },
+                setCurrentIndex = { index ->
+                    unlockScreenViewModel.setSelectedIndex(index)
+                },
+                deletePasscodeValue = { index ->
+                    unlockScreenViewModel.deletePasscodeValue(index)
+                },
+                onFinished = { passcode ->
+                    unlockScreenViewModel.finish(passcode, navController, homeScreenViewModel)
                 }
             )
         }
