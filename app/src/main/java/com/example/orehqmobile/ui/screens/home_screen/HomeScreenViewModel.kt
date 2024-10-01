@@ -12,12 +12,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.orehqmobile.OreHQMobileApplication
+import com.example.orehqmobile.data.database.AppRoomDatabase
+import com.example.orehqmobile.data.entities.Wallet
 import com.example.orehqmobile.data.repositories.IKeypairRepository
 import com.example.orehqmobile.data.repositories.IPoolRepository
 import com.example.orehqmobile.data.repositories.ISolanaRepository
 import com.example.orehqmobile.data.models.Ed25519PublicKey
 import com.example.orehqmobile.data.models.ServerMessage
 import com.example.orehqmobile.data.models.toLittleEndianByteArray
+import com.example.orehqmobile.data.repositories.WalletRepository
 import com.funkatronics.encoders.Base58
 import com.funkatronics.encoders.Base64
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
@@ -92,6 +95,8 @@ class HomeScreenViewModel(
     )
         private set
 
+    private val walletRepository: WalletRepository
+
     private val solanaUri = Uri.parse("https://orehqmobile.com")
     private val iconUri = Uri.parse("favicon.ico") // resolves to https://yourdapp.com/favicon.ico
     private val identityName = "Ore HQ Mobile"
@@ -107,6 +112,12 @@ class HomeScreenViewModel(
 
     init {
         walletAdapter.blockchain = Solana.Mainnet
+
+        val appDb = AppRoomDatabase.getInstance(application)
+        val walletDao = appDb.walletDao()
+        walletRepository = WalletRepository(walletDao)
+
+        loadSecureWallet()
 
         val runtimeAvailableThreads = Runtime.getRuntime().availableProcessors()
         homeUiState = homeUiState.copy(availableThreads = runtimeAvailableThreads)
@@ -137,7 +148,25 @@ class HomeScreenViewModel(
         keypair = newKeypair
     }
 
-    fun loadPoolAuthorityPubkey() {
+    private fun loadSecureWallet() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val secureWallet = walletRepository.getAllWallets()
+
+            if (secureWallet.size > 0) {
+                Log.d("HomeScreenViewModel", "Found secure wallet db data.")
+                withContext(Dispatchers.Main) {
+                    walletAdapter.authToken = secureWallet[0].authToken
+                    homeUiState = homeUiState.copy(
+                        secureWalletPubkey = secureWallet[0].publicKey
+                    )
+                }
+            } else {
+                Log.d("HomeScreenViewModel", "No secure wallet data in db.")
+            }
+        }
+    }
+
+    private fun loadPoolAuthorityPubkey() {
         viewModelScope.launch(Dispatchers.IO) {
             val poolAuthPubkeyResult = poolRepository.fetchPoolAuthorityPubkey()
             poolAuthPubkeyResult.fold(
@@ -608,10 +637,12 @@ class HomeScreenViewModel(
         viewModelScope.launch {
             when (val result = walletAdapter.connect(activity_sender)) {
                 is TransactionResult.Success -> {
+                    val pubkeyString = solanaRepository.base58Encode(result.authResult.accounts[0].publicKey)
+                    walletRepository.insertWallet(Wallet(pubkeyString, result.authResult.authToken))
                     withContext(Dispatchers.Main) {
                         Log.d("HomeScreenViewModel", "SignInResult IS NOT NULL")
                         homeUiState = homeUiState.copy(
-                            secureWalletPubkey = solanaRepository.base58Encode(result.authResult.accounts[0].publicKey)
+                            secureWalletPubkey = pubkeyString
                         )
                     }
                 }

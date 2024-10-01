@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+    id("kotlin-kapt")
 }
 
 android {
@@ -88,4 +89,12 @@ dependencies {
     // Solana Keypair Dependencies
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("org.bouncycastle:bcprov-jdk15on:1.68")
+
+    // Room
+    val room_version = "2.6.1"
+    implementation("androidx.room:room-runtime:$room_version")
+    //annotationProcessor("androidx.room:room-compiler:$room_version")
+
+    kapt("androidx.room:room-compiler:$room_version")
+    implementation("androidx.compose.runtime:runtime-livedata:1.3.1")
 }
