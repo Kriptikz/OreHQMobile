@@ -25,6 +25,7 @@ interface ISolanaRepository {
         keypairs: List<AsymmetricCipherKeyPair>
     ): SignatureResult
     fun getSolTransferTransaction(latestBlockhash: String, from: String, to: String, amount: ULong): Transaction?
+    fun getSolTransferTransactionWithFeePayer(latestBlockhash: String, from: String, to: String, feePayer: String, amount: ULong): Transaction?
     fun solToLamports(sol_amount: Double): ULong
     fun lamportsToSol(lamports_amount: ULong): Double
 }
@@ -142,6 +143,18 @@ class SolanaRepository : ISolanaRepository {
     override fun getSolTransferTransaction(latestBlockhash: String, from: String, to: String, amount: ULong): Transaction? {
         try {
             val encodedTxn = uniffi.orehqmobileffi.getTransferLamportsTransaction(latestBlockhash, from, to, amount)
+            var decodedTxn = Base64.decode(encodedTxn)
+            val txn = Transaction.from(decodedTxn)
+            return txn
+        } catch (e: uniffi.orehqmobileffi.OreHqMobileFfiException) {
+            Log.e("SolanaRepository", "Failed to generate sol transfer txn: $e")
+            return null
+        }
+    }
+
+    override fun getSolTransferTransactionWithFeePayer(latestBlockhash: String, from: String, to: String, feePayer: String, amount: ULong): Transaction? {
+        try {
+            val encodedTxn = uniffi.orehqmobileffi.getTransferLamportsTransactionWithFeePayer(latestBlockhash, from, to, feePayer, amount)
             var decodedTxn = Base64.decode(encodedTxn)
             val txn = Transaction.from(decodedTxn)
             return txn

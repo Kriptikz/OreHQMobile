@@ -29,6 +29,7 @@ import com.example.orehqmobile.data.repositories.KeypairRepository
 import com.example.orehqmobile.ui.OreHQMobileApp
 import com.example.orehqmobile.ui.screens.home_screen.HomeScreen
 import com.example.orehqmobile.ui.theme.OreHQMobileTheme
+import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -46,10 +47,12 @@ class MainActivity : ComponentActivity() {
 
         val hasEncryptedKeypair = keypairRepository.encryptedKeypairExists();
 
+        val sender = ActivityResultSender(this)
 
         setContent {
             OreHQMobileTheme {
                 OreHQMobileApp(
+                    sender,
                     hasEncryptedKeypair
                 )
             }

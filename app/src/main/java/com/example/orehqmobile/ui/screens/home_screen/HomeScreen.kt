@@ -31,6 +31,9 @@ fun HomeScreen(
     onToggleMining: () -> Unit,
     onClickSignup: () -> Unit,
     onConnectToWebsocket: () -> Unit,
+    onClickConnectWallet: () -> Unit,
+    onClickDepositSol: () -> Unit,
+    onClickWithdrawSol: () -> Unit,
 ) {
     OreHQMobileScaffold(title = "Home", displayTopBar = true) {
         Column(
@@ -55,6 +58,9 @@ fun HomeScreen(
                     SignUpScreen(
                         homeUiState = homeUiState,
                         onClickSignUp = onClickSignup,
+                        onClickConnectWallet = onClickConnectWallet,
+                        onClickDepositSol = onClickDepositSol,
+                        onClickWithdrawSol = onClickWithdrawSol,
                     )
                 }
 
@@ -85,12 +91,16 @@ fun HomeScreenPreview() {
                 isWebsocketConnected = false,
                 isSignedUp = false,
                 isLoadingUi = false,
+                secureWalletPubkey = null,
             ),
             onDecreaseSelectedThreads = {},
             onIncreaseSelectedThreads = {},
             onToggleMining = {},
             onClickSignup = {},
             onConnectToWebsocket = {},
+            onClickConnectWallet = {},
+            onClickDepositSol = {},
+            onClickWithdrawSol = {},
         )
     }
 }
@@ -205,12 +215,42 @@ fun MiningScreen(
 fun SignUpScreen(
     homeUiState: HomeUiState,
     onClickSignUp: () -> Unit,
+    onClickConnectWallet: () -> Unit,
+    onClickDepositSol: () -> Unit,
+    onClickWithdrawSol: () -> Unit,
 ) {
     Text("Sol Balance: ${homeUiState.solBalance}")
-    Button(
-        onClick = onClickSignUp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text("Sign Up")
+
+    if (homeUiState.solBalance >= 0.001005) {
+        Button(
+            onClick = onClickSignUp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Sign Up")
+        }
+    } else {
+        Text("Please deposit sol for signup")
+    }
+
+    if (homeUiState.secureWalletPubkey != null) {
+        Button(
+            onClick = onClickDepositSol,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Deposit Sol")
+        }
+        Button(
+            onClick = onClickWithdrawSol,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Withdraw Sol")
+        }
+    } else {
+        Button(
+            onClick = onClickConnectWallet,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Connect Wallet")
+        }
     }
 }

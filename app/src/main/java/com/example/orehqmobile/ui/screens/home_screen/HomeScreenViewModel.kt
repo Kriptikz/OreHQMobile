@@ -1,6 +1,8 @@
 package com.example.orehqmobile.ui.screens.home_screen
 
+import android.net.Uri
 import android.util.Log
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,6 +20,12 @@ import com.example.orehqmobile.data.models.ServerMessage
 import com.example.orehqmobile.data.models.toLittleEndianByteArray
 import com.funkatronics.encoders.Base58
 import com.funkatronics.encoders.Base64
+import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
+import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
+import com.solana.mobilewalletadapter.clientlib.MobileWalletAdapter
+import com.solana.mobilewalletadapter.clientlib.Solana
+import com.solana.mobilewalletadapter.clientlib.TransactionResult
+import com.solana.mobilewalletadapter.clientlib.successPayload
 import com.solana.transaction.blockhash
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +56,7 @@ data class HomeUiState(
     var isWebsocketConnected: Boolean,
     var isSignedUp: Boolean,
     var isLoadingUi: Boolean,
+    var secureWalletPubkey: String?,
 )
 
 @OptIn(ExperimentalStdlibApi::class)
@@ -78,11 +87,27 @@ class HomeScreenViewModel(
             isWebsocketConnected = false,
             isSignedUp = false,
             isLoadingUi = true,
+            secureWalletPubkey = null,
         )
     )
         private set
 
+    private val solanaUri = Uri.parse("https://orehqmobile.com")
+    private val iconUri = Uri.parse("favicon.ico") // resolves to https://yourdapp.com/favicon.ico
+    private val identityName = "Ore HQ Mobile"
+
+    private var walletAdapter = MobileWalletAdapter(connectionIdentity =
+        ConnectionIdentity(
+            identityUri = solanaUri,
+            iconUri = iconUri,
+            identityName = identityName
+        )
+    )
+
+
     init {
+        walletAdapter.blockchain = Solana.Mainnet
+
         val runtimeAvailableThreads = Runtime.getRuntime().availableProcessors()
         homeUiState = homeUiState.copy(availableThreads = runtimeAvailableThreads)
 
@@ -304,7 +329,31 @@ class HomeScreenViewModel(
 
         }
     }
-    
+
+    private suspend fun loadSolBalance() {
+        val kp = keypair
+        if (kp != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    // Fetch wallet token balance
+                    val publicKey = Base58.encodeToString((kp.public as Ed25519PublicKeyParameters).encoded)
+
+                    val solBalanceResult = poolRepository.fetchSolBalance(publicKey)
+                    solBalanceResult.fold(
+                        onSuccess = { balance ->
+                            homeUiState = homeUiState.copy(solBalance = balance)
+                        },
+                        onFailure = { error ->
+                            Log.e("HomeScreenViewModel", "Error fetching sol balance", error)
+                        }
+                    )
+                } catch (e: Exception) {
+                    Log.e("HomeScreenViewModel", "Unexpected error", e)
+                }
+            }
+
+        }
+    }
 
 //    private suspend fun loadOrGenerateKeypair() {
 //        val password = "password"
@@ -517,8 +566,14 @@ class HomeScreenViewModel(
                                 var signedTxnStr = solanaRepository.base64Encode(signedTxn.signedPayload)
                                 val signedUp = poolRepository.signup(publicKey, signedTxnStr)
                                 signedUp.fold(
-                                    onSuccess = { _successResult ->
+                                    onSuccess = {
                                         Log.d("HomeScreenViewModel", "Successfully signed up!")
+
+                                        withContext(Dispatchers.Main) {
+                                            homeUiState = homeUiState.copy(
+                                                isSignedUp = true
+                                            )
+                                        }
                                     },
                                     onFailure = { error ->
                                         Log.e("HomeScreenViewModel", "Error processing signup request", error)
@@ -547,6 +602,102 @@ class HomeScreenViewModel(
         homeUiState = homeUiState.copy(
             isMiningEnabled = toggled
         )
+    }
+
+    fun connectSecureWallet(activity_sender: ActivityResultSender) {
+        viewModelScope.launch {
+            when (val result = walletAdapter.connect(activity_sender)) {
+                is TransactionResult.Success -> {
+                    withContext(Dispatchers.Main) {
+                        Log.d("HomeScreenViewModel", "SignInResult IS NOT NULL")
+                        homeUiState = homeUiState.copy(
+                            secureWalletPubkey = solanaRepository.base58Encode(result.authResult.accounts[0].publicKey)
+                        )
+                    }
+                }
+                is TransactionResult.NoWalletFound -> {
+                    Log.e("HomeScreenViewModel", "No MWA compatible app wallet found on device.")
+                }
+                is TransactionResult.Failure -> {
+                    Log.e("HomeScreenViewModel", "Error connecting to wallet: ${result.e.message}")
+                }
+            }
+        }
+    }
+
+    fun depositSol(activity_sender: ActivityResultSender) {
+        viewModelScope.launch {
+            val latestBlockhash = poolRepository.fetchLatestBlockhash()
+            latestBlockhash.fold(
+                onSuccess = { latestBlockhash ->
+                    val result = walletAdapter.transact(activity_sender) { authResult ->
+                        val senderPubkey = homeUiState.secureWalletPubkey!!
+                        val receiverPubkey = solanaRepository.base58Encode((keypair!!.public as Ed25519PublicKeyParameters).encoded)
+
+                        val txn = solanaRepository.getSolTransferTransaction(latestBlockhash, senderPubkey, receiverPubkey, 1_005_000uL)
+                        signAndSendTransactions(arrayOf(txn!!.serialize()))
+                    }
+                    when (result) {
+                        is TransactionResult.Success -> {
+                            val txSignatureBytes = result.successPayload?.signatures?.first()
+                            txSignatureBytes?.let {
+                                val sig = solanaRepository.base58Encode(it)
+                                Log.d("HomeScreenViewModel", "Sig: $sig")
+                                loadSolBalance()
+                            }
+                        }
+                        is TransactionResult.NoWalletFound -> {
+                            Log.e("HomeScreenViewModel", "No MWA compatible app wallet found on device.")
+                        }
+                        is TransactionResult.Failure -> {
+                            Log.e("HomeScreenViewModel", "Error connecting to wallet: ${result.e.message}")
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    Log.e("HomeScreenViewModel", "Error fetching latest blockhash", error)
+                }
+            )
+        }
+    }
+
+    fun withdrawSol(activity_sender: ActivityResultSender) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val latestBlockhash = poolRepository.fetchLatestBlockhash()
+            latestBlockhash.fold(
+                onSuccess = { latestBlockhash ->
+                    val result = walletAdapter.transact(activity_sender) { authResult ->
+                        val receiverPubkey = homeUiState.secureWalletPubkey!!
+                        val senderPubkey = solanaRepository.base58Encode((keypair!!.public as Ed25519PublicKeyParameters).encoded)
+
+                        val txn = solanaRepository.getSolTransferTransactionWithFeePayer(latestBlockhash, senderPubkey, receiverPubkey, receiverPubkey, 1_005_000uL)
+                        var partialSignedTxn = solanaRepository.signTransaction(txn!!.serialize(), listOf(keypair!!)).signedPayload
+
+
+                        signAndSendTransactions(arrayOf(partialSignedTxn))
+                    }
+                    when (result) {
+                        is TransactionResult.Success -> {
+                            val txSignatureBytes = result.successPayload?.signatures?.first()
+                            txSignatureBytes?.let {
+                                val sig = solanaRepository.base58Encode(it)
+                                Log.d("HomeScreenViewModel", "Sig: $sig")
+                                loadSolBalance()
+                            }
+                        }
+                        is TransactionResult.NoWalletFound -> {
+                            Log.e("HomeScreenViewModel", "No MWA compatible app wallet found on device.")
+                        }
+                        is TransactionResult.Failure -> {
+                            Log.e("HomeScreenViewModel", "Error connecting to wallet: ${result.e.message}")
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    Log.e("HomeScreenViewModel", "Error fetching latest blockhash", error)
+                }
+            )
+        }
     }
 
     companion object {

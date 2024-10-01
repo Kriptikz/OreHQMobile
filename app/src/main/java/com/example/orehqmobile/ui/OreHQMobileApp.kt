@@ -1,5 +1,7 @@
 package com.example.orehqmobile.ui
 
+import android.app.Activity
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -16,9 +18,11 @@ import com.example.orehqmobile.ui.screens.save_with_passcode_screen.SaveWithPass
 import com.example.orehqmobile.ui.screens.save_with_passcode_screen.SaveWithPasscodeScreenViewModel
 import com.example.orehqmobile.ui.screens.unlock_screen.UnlockScreen
 import com.example.orehqmobile.ui.screens.unlock_screen.UnlockScreenViewModel
+import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 
 @Composable
 fun OreHQMobileApp(
+    activity_sender: ActivityResultSender,
     hasEncryptedKey: Boolean = false,
     homeScreenViewModel: HomeScreenViewModel = viewModel(factory = HomeScreenViewModel.Factory),
     createdWalletScreenViewModel: CreatedWalletScreenViewModel = viewModel(factory = CreatedWalletScreenViewModel.Factory),
@@ -41,7 +45,10 @@ fun OreHQMobileApp(
                 onDecreaseSelectedThreads = { homeScreenViewModel.decreaseSelectedThreads() },
                 onToggleMining = { homeScreenViewModel.toggleMining() },
                 onClickSignup = { homeScreenViewModel.signUpClicked() },
-                onConnectToWebsocket = { homeScreenViewModel.connectToWebsocket() }
+                onConnectToWebsocket = { homeScreenViewModel.connectToWebsocket() },
+                onClickConnectWallet = { homeScreenViewModel.connectSecureWallet(activity_sender) },
+                onClickDepositSol = { homeScreenViewModel.depositSol(activity_sender) },
+                onClickWithdrawSol = { homeScreenViewModel.withdrawSol(activity_sender) },
             )
         }
         composable("newWalletStartScreen") {
