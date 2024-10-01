@@ -696,6 +696,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -716,6 +718,8 @@ internal interface UniffiLib : Library {
     fun uniffi_orehqmobileffi_fn_func_generate_key(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_orehqmobileffi_fn_func_get_transfer_lamports_transaction(`latestBlockhash`: RustBuffer.ByValue,`fromPubkeyStr`: RustBuffer.ByValue,`toPubkeyStr`: RustBuffer.ByValue,`amount`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_orehqmobileffi_fn_func_get_transfer_lamports_transaction_with_fee_payer(`latestBlockhash`: RustBuffer.ByValue,`fromPubkeyStr`: RustBuffer.ByValue,`toPubkeyStr`: RustBuffer.ByValue,`feePayerStr`: RustBuffer.ByValue,`amount`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun ffi_orehqmobileffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -835,6 +839,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_orehqmobileffi_checksum_func_get_transfer_lamports_transaction(
     ): Short
+    fun uniffi_orehqmobileffi_checksum_func_get_transfer_lamports_transaction_with_fee_payer(
+    ): Short
     fun ffi_orehqmobileffi_uniffi_contract_version(
     ): Int
     
@@ -859,6 +865,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_orehqmobileffi_checksum_func_get_transfer_lamports_transaction() != 2450.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_orehqmobileffi_checksum_func_get_transfer_lamports_transaction_with_fee_payer() != 22.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1183,6 +1192,16 @@ public object FfiConverterSequenceUByte: FfiConverterRustBuffer<List<kotlin.UByt
     uniffiRustCallWithError(OreHqMobileFfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_orehqmobileffi_fn_func_get_transfer_lamports_transaction(
         FfiConverterString.lower(`latestBlockhash`),FfiConverterString.lower(`fromPubkeyStr`),FfiConverterString.lower(`toPubkeyStr`),FfiConverterULong.lower(`amount`),_status)
+}
+    )
+    }
+    
+
+    @Throws(OreHqMobileFfiException::class) fun `getTransferLamportsTransactionWithFeePayer`(`latestBlockhash`: kotlin.String, `fromPubkeyStr`: kotlin.String, `toPubkeyStr`: kotlin.String, `feePayerStr`: kotlin.String, `amount`: kotlin.ULong): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(OreHqMobileFfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_orehqmobileffi_fn_func_get_transfer_lamports_transaction_with_fee_payer(
+        FfiConverterString.lower(`latestBlockhash`),FfiConverterString.lower(`fromPubkeyStr`),FfiConverterString.lower(`toPubkeyStr`),FfiConverterString.lower(`feePayerStr`),FfiConverterULong.lower(`amount`),_status)
 }
     )
     }
