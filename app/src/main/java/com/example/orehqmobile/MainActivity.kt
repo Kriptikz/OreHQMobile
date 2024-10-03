@@ -16,10 +16,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.example.orehqmobile.data.repositories.KeypairRepository
 import com.example.orehqmobile.service.OreHQMobileForegroundService
+import com.example.orehqmobile.ui.OreHQMobileApp
 import com.example.orehqmobile.ui.screens.ForegroundServiceSampleScreen
+import com.example.orehqmobile.ui.screens.home_screen.HomeScreenViewModel
 import com.example.orehqmobile.ui.theme.OreHQMobileTheme
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import kotlinx.coroutines.flow.collectLatest
@@ -28,11 +31,15 @@ import kotlinx.coroutines.launch
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 
 class MainActivity : ComponentActivity() {
+    private lateinit var homeScreenViewModel: HomeScreenViewModel
     private var oreHQMobileService: OreHQMobileForegroundService? = null
 
     private var serviceBoundState by mutableStateOf(false)
 
-    private var displayableLocation by mutableStateOf<String?>(null)
+    private var threadCount by mutableStateOf<Int>(1)
+    private var hashpower by mutableStateOf<UInt>(0u)
+    private var difficulty by mutableStateOf<UInt>(0u)
+    private var lastDifficulty by mutableStateOf<UInt>(0u)
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
@@ -40,6 +47,8 @@ class MainActivity : ComponentActivity() {
 
             val binder = service as OreHQMobileForegroundService.LocalBinder
             oreHQMobileService = binder.getService()
+            binder.setSignCallback(homeScreenViewModel.getSignFunction())
+            binder.getPubkeyCallback(homeScreenViewModel.getPubkeyFunction())
             serviceBoundState = true
 
             onServiceConnected()
@@ -73,17 +82,23 @@ class MainActivity : ComponentActivity() {
 
         val sender = ActivityResultSender(this)
 
+        homeScreenViewModel = ViewModelProvider(this, HomeScreenViewModel.Factory)[HomeScreenViewModel::class.java]
+
+
         setContent {
             OreHQMobileTheme {
-                ForegroundServiceSampleScreen(
+                OreHQMobileApp(
+                    sender,
+                    hasEncryptedKeypair,
+                    threadCount = threadCount,
+                    hashpower = hashpower,
+                    difficulty = difficulty,
+                    lastDifficulty =  lastDifficulty,
+                    oreHQMobileService,
+                    onClickService = ::onStartOrStopForegroundServiceClick,
                     serviceRunning = serviceBoundState,
-                    currentLocation = displayableLocation,
-                    onClick = ::onStartOrStopForegroundServiceClick,
+                    homeScreenViewModel
                 )
-//                OreHQMobileApp(
-//                    sender,
-//                    hasEncryptedKeypair
-//                )
             }
         }
 
@@ -143,13 +158,23 @@ class MainActivity : ComponentActivity() {
 
     private fun onServiceConnected() {
         lifecycleScope.launch {
-            // observe location updates from the service
-            oreHQMobileService?.locationFlow?.map {
-                it?.let { location ->
-                    "${location.latitude}, ${location.longitude}"
-                }
-            }?.collectLatest {
-                displayableLocation = it
+            oreHQMobileService?.threadCount?.collectLatest { it ->
+                threadCount = it
+            }
+        }
+        lifecycleScope.launch {
+            oreHQMobileService?.hashpower?.collectLatest { it ->
+                hashpower = it
+            }
+        }
+        lifecycleScope.launch {
+            oreHQMobileService?.difficulty?.collectLatest { it ->
+                difficulty = it
+            }
+        }
+        lifecycleScope.launch {
+            oreHQMobileService?.lastDifficulty?.collectLatest { it ->
+                lastDifficulty = it
             }
         }
     }

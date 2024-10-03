@@ -89,7 +89,6 @@ class UnlockScreenViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             if (homeScreenViewModel.loadKeypair(passcodeStr)) {
-                homeScreenViewModel.connectToWebsocket()
                 homeScreenViewModel.fetchUiState()
                 withContext(Dispatchers.Main) {
                     navController.navigate("homeScreen")

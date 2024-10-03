@@ -90,7 +90,6 @@ class SaveWithPasscodeScreenViewModel(
             while (true) {
                 if (keypairRepository.encryptedKeypairExists()) {
                     homeScreenViewModel.loadKeypair(passcodeStr)
-                    homeScreenViewModel.connectToWebsocket()
                     homeScreenViewModel.fetchUiState()
                     withContext(Dispatchers.Main) {
                         navController.navigate("homeScreen")

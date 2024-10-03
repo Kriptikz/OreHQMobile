@@ -56,7 +56,6 @@ data class HomeUiState(
     var poolBalance: Double,
     var poolMultiplier: Double,
     var topStake: Double,
-    var isWebsocketConnected: Boolean,
     var isSignedUp: Boolean,
     var isLoadingUi: Boolean,
     var secureWalletPubkey: String?,
@@ -87,7 +86,6 @@ class HomeScreenViewModel(
             poolBalance = 0.0,
             poolMultiplier = 0.0,
             topStake = 0.0,
-            isWebsocketConnected = false,
             isSignedUp = false,
             isLoadingUi = true,
             secureWalletPubkey = null,
@@ -189,83 +187,6 @@ class HomeScreenViewModel(
         keypair = AsymmetricCipherKeyPair(privateKey.generatePublicKey(), privateKey)
 
         return true
-    }
-
-    fun connectToWebsocket() {
-        if (!homeUiState.isWebsocketConnected && homeUiState.isSignedUp) {
-            viewModelScope.launch(Dispatchers.IO) {
-                homeUiState = homeUiState.copy(isWebsocketConnected = true)
-                val result = poolRepository.fetchTimestamp()
-                result.fold(
-                    onSuccess = { timestamp ->
-                        Log.d("HomeScreenViewModel", "Fetched timestamp: $timestamp")
-                        val tsBytes = timestamp.toLittleEndianByteArray()
-
-                        if (keypair != null) {
-                            Log.d("HomeScreenViewModel", "Keypair is not null")
-                        } else {
-                            Log.d("HomeScreenViewModel", "Keypair is null")
-
-                        }
-                        val signatureResult = solanaRepository.signMessage(tsBytes, listOf(keypair!!))
-
-                        val sig = signatureResult.signature
-                        val publicKey = (keypair!!.public as Ed25519PublicKeyParameters).encoded
-
-                        //val privateKey = (keypair!!.private as Ed25519PrivateKeyParameters).encoded
-
-                        // Connect to WebSocket
-                        viewModelScope.launch(Dispatchers.IO) {
-                            try {
-                                poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), Base58.encodeToString(publicKey)
-                                ).collect { serverMessage ->
-                                    // Handle incoming WebSocket data
-                                    Log.d("HomeScreenViewModel", "Received WebSocket data: $serverMessage")
-                                    // Process the data as needed
-                                    when (serverMessage) {
-                                        is ServerMessage.StartMining -> handleStartMining(serverMessage)
-                                        is ServerMessage.PoolSubmissionResult -> handlePoolSubmissionResult(serverMessage)
-                                    }
-                                }
-
-                                homeUiState = homeUiState.copy(isWebsocketConnected = false)
-                            } catch (e: Exception) {
-                                homeUiState = homeUiState.copy(isWebsocketConnected = false)
-                                Log.e("HomeScreenViewModel", "WebSocket error: ${e.message}")
-                                when (e) {
-                                    is io.ktor.client.plugins.ClientRequestException -> {
-                                        val errorBody = e.response.bodyAsText()
-                                        Log.e("HomeScreenViewModel", "Error body: $errorBody")
-                                    }
-                                    is io.ktor.client.plugins.ServerResponseException -> {
-                                        val errorBody = e.response.bodyAsText()
-                                        Log.e("HomeScreenViewModel", "Error body: $errorBody")
-                                    }
-                                    else -> {
-                                        Log.e("HomeScreenViewModel", "Unexpected error", e)
-                                    }
-                                }
-                            }
-
-                            homeUiState = homeUiState.copy(
-                                isWebsocketConnected = false,
-                                isMiningEnabled = false,
-                            )
-                        }
-
-
-                    },
-                    onFailure = { error ->
-                        homeUiState = homeUiState.copy(
-                            isWebsocketConnected = false,
-                            isMiningEnabled = false,
-                        )
-                        Log.e("HomeScreenViewModel", "Error fetching timestamp", error)
-                    }
-                )
-
-            }
-        }
     }
 
     suspend fun fetchUiState() {
@@ -728,6 +649,23 @@ class HomeScreenViewModel(
                     Log.e("HomeScreenViewModel", "Error fetching latest blockhash", error)
                 }
             )
+        }
+    }
+
+    fun getSignFunction(): (ByteArray) -> ByteArray {
+        return { data ->
+            keypair?.let { kp ->
+                solanaRepository.signMessage(data, listOf(kp)).signature
+            } ?: ByteArray(0)
+        }
+    }
+
+    fun getPubkeyFunction(): () -> String {
+        return {
+            keypair?.let { kp ->
+                val publicKey = (kp.public as Ed25519PublicKeyParameters).encoded
+                Base58.encodeToString(publicKey)
+            } ?: ""
         }
     }
 

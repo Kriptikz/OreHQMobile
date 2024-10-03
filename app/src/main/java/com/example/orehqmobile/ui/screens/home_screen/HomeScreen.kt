@@ -26,11 +26,15 @@ import com.example.orehqmobile.ui.theme.OreHQMobileTheme
 @Composable
 fun HomeScreen(
     homeUiState: HomeUiState,
+    serviceRunning: Boolean,
+    threadCount: Int,
+    hashpower: UInt,
+    difficulty: UInt,
+    lastDifficulty: UInt,
     onIncreaseSelectedThreads: () -> Unit,
     onDecreaseSelectedThreads: () -> Unit,
     onToggleMining: () -> Unit,
     onClickSignup: () -> Unit,
-    onConnectToWebsocket: () -> Unit,
     onClickConnectWallet: () -> Unit,
     onClickDepositSol: () -> Unit,
     onClickWithdrawSol: () -> Unit,
@@ -49,10 +53,14 @@ fun HomeScreen(
                 if (homeUiState.isSignedUp) {
                     MiningScreen(
                         homeUiState = homeUiState,
+                        serviceRunning = serviceRunning,
+                        threadCount = threadCount,
+                        hashpower = hashpower,
+                        difficulty = difficulty,
+                        lastDifficulty = lastDifficulty,
                         onIncreaseSelectedThreads,
                         onDecreaseSelectedThreads,
                         onToggleMining,
-                        onConnectToWebsocket,
                     )
                 } else {
                     SignUpScreen(
@@ -88,16 +96,19 @@ fun HomeScreenPreview() {
                 poolBalance = 0.0,
                 topStake = 0.0,
                 poolMultiplier = 0.0,
-                isWebsocketConnected = false,
                 isSignedUp = false,
                 isLoadingUi = false,
                 secureWalletPubkey = null,
             ),
+            serviceRunning = false,
+            threadCount = 1,
+            hashpower = 0u,
+            difficulty = 0u,
+            lastDifficulty = 0u,
             onDecreaseSelectedThreads = {},
             onIncreaseSelectedThreads = {},
             onToggleMining = {},
             onClickSignup = {},
-            onConnectToWebsocket = {},
             onClickConnectWallet = {},
             onClickDepositSol = {},
             onClickWithdrawSol = {},
@@ -108,16 +119,18 @@ fun HomeScreenPreview() {
 @Composable
 fun MiningScreen(
     homeUiState: HomeUiState,
+    serviceRunning: Boolean,
+    threadCount: Int,
+    hashpower: UInt,
+    difficulty: UInt,
+    lastDifficulty: UInt,
     onIncreaseSelectedThreads: () -> Unit,
     onDecreaseSelectedThreads: () -> Unit,
     onToggleMining: () -> Unit,
-    onConnectToWebsocket: () -> Unit,
 ) {
-    val hashrate = homeUiState.hashRate
-    val difficulty = homeUiState.difficulty
-    val lastDifficulty = homeUiState.lastDifficulty
+    val difficulty = difficulty
+    val lastDifficulty = lastDifficulty
     val availableThreads = homeUiState.availableThreads
-    val selectedThreads = homeUiState.selectedThreads
     val isMiningEnabled = homeUiState.isMiningEnabled
     val claimableBalance = homeUiState.claimableBalance
     val walletTokenBalance = homeUiState.walletTokenBalance
@@ -125,7 +138,6 @@ fun MiningScreen(
     val poolBalance = homeUiState.poolBalance
     val topStake = homeUiState.topStake
     val poolMultiplier = homeUiState.poolMultiplier
-    val isWebsocketConnected = homeUiState.isWebsocketConnected
 
     // Wallet ORE Balance
     Text(
@@ -136,12 +148,6 @@ fun MiningScreen(
     // Mining status
     Text(
         text = if (isMiningEnabled) "Mining..." else "Stopped",
-        style = MaterialTheme.typography.headlineSmall,
-        modifier = Modifier.padding(bottom = 16.dp)
-    )
-
-    Text(
-        text = if (isWebsocketConnected) "WS: Connected" else "WS: Not Connected",
         style = MaterialTheme.typography.headlineSmall,
         modifier = Modifier.padding(bottom = 16.dp)
     )
@@ -163,7 +169,7 @@ fun MiningScreen(
         modifier = Modifier.padding(top = 32.dp, bottom = 32.dp)
     )
 
-    Text(text = "Hashpower: $hashrate", modifier = Modifier.padding(bottom = 8.dp))
+    Text(text = "Hashpower: $hashpower", modifier = Modifier.padding(bottom = 8.dp))
     Text(text = "Last Difficulty: $lastDifficulty", modifier = Modifier.padding(bottom = 16.dp))
     Text(text = "Difficulty: $difficulty", modifier = Modifier.padding(bottom = 16.dp))
 
@@ -177,7 +183,7 @@ fun MiningScreen(
             Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease threads")
         }
         Text(
-            text = selectedThreads.toString(),
+            text = threadCount.toString(),
             modifier = Modifier.padding(horizontal = 8.dp)
         )
         IconButton(onClick = onIncreaseSelectedThreads) {
@@ -187,20 +193,11 @@ fun MiningScreen(
     }
 
     // Mining toggle button
-    if (isWebsocketConnected) {
-        Button(
-            onClick = onToggleMining,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (isMiningEnabled) "Stop Mining" else "Start Mining")
-        }
-    } else {
-        Button(
-            onClick = onConnectToWebsocket,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Connect")
-        }
+    Button(
+        onClick = onToggleMining,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(if (serviceRunning) "Stop Mining" else "Start Mining")
     }
 
     Text(

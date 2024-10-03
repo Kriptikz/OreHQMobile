@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.orehqmobile.service.OreHQMobileForegroundService
 import com.example.orehqmobile.ui.screens.home_screen.HomeScreen
 import com.example.orehqmobile.ui.screens.home_screen.HomeScreenViewModel
 import com.example.orehqmobile.ui.screens.new_created_wallet_screen.CreatedWalletScreen
@@ -24,6 +25,13 @@ import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 fun OreHQMobileApp(
     activity_sender: ActivityResultSender,
     hasEncryptedKey: Boolean = false,
+    threadCount: Int,
+    hashpower: UInt,
+    difficulty: UInt,
+    lastDifficulty: UInt,
+    oreHqMobileService: OreHQMobileForegroundService? = null,
+    onClickService: () -> Unit,
+    serviceRunning: Boolean,
     homeScreenViewModel: HomeScreenViewModel = viewModel(factory = HomeScreenViewModel.Factory),
     createdWalletScreenViewModel: CreatedWalletScreenViewModel = viewModel(factory = CreatedWalletScreenViewModel.Factory),
     saveWithPasscodeScreenViewModel: SaveWithPasscodeScreenViewModel = viewModel(factory = SaveWithPasscodeScreenViewModel.Factory),
@@ -41,11 +49,15 @@ fun OreHQMobileApp(
         composable("homeScreen") {
             HomeScreen(
                 homeUiState = homeScreenViewModel.homeUiState,
-                onIncreaseSelectedThreads = { homeScreenViewModel.increaseSelectedThreads() },
-                onDecreaseSelectedThreads = { homeScreenViewModel.decreaseSelectedThreads() },
-                onToggleMining = { homeScreenViewModel.toggleMining() },
+                serviceRunning = serviceRunning,
+                threadCount = threadCount,
+                hashpower = hashpower,
+                difficulty = difficulty,
+                lastDifficulty = lastDifficulty,
+                onIncreaseSelectedThreads = { oreHqMobileService?.increaseSelectedThreads() },
+                onDecreaseSelectedThreads = { oreHqMobileService?.decreaseSelectedThreads() },
+                onToggleMining = onClickService,
                 onClickSignup = { homeScreenViewModel.signUpClicked() },
-                onConnectToWebsocket = { homeScreenViewModel.connectToWebsocket() },
                 onClickConnectWallet = { homeScreenViewModel.connectSecureWallet(activity_sender) },
                 onClickDepositSol = { homeScreenViewModel.depositSol(activity_sender) },
                 onClickWithdrawSol = { homeScreenViewModel.withdrawSol(activity_sender) },

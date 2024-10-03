@@ -30,6 +30,7 @@ interface IPoolRepository {
         timestamp: ULong,
         signature: String,
         publicKey: String,
+        onConnectionCallback: (() -> Unit)?,
     ): Flow<ServerMessage>
 
     suspend fun fetchTimestamp(): Result<ULong>
@@ -62,6 +63,7 @@ class PoolRepository : IPoolRepository {
         timestamp: ULong,
         signature: String,
         publicKey: String,
+        onConnectionCallback: (() -> Unit)?,
     ): Flow<ServerMessage> = flow {
         val auth = Base64.getEncoder().encodeToString("${publicKey}:${signature}".toByteArray())
 
@@ -73,6 +75,7 @@ class PoolRepository : IPoolRepository {
             }
         ) {
             webSocketSession = this
+            onConnectionCallback?.invoke()
             for (frame in incoming) {
                 if (frame is Frame.Text) {
                     Log.d("PoolRepository", "Got Text: ${frame.readText()}")

@@ -27,10 +27,10 @@ internal object NotificationsHelper {
         notificationManager.createNotificationChannel(channel)
     }
 
-    fun buildNotification(context: Context, hashpower: UInt, difficulty: UInt): Notification {
+    fun buildNotification(context: Context, threads: Int, hashpower: UInt, difficulty: UInt): Notification {
         return NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
             .setContentTitle(context.getString(R.string.foreground_service_notification_title))
-            .setContentText("Hashpower: $hashpower H/s, Difficulty: $difficulty")
+            .setContentText("$threads Thread(s), $hashpower H/s, Latest Diff: $difficulty")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(Intent(context, MainActivity::class.java).let { notificationIntent ->
@@ -39,9 +39,9 @@ internal object NotificationsHelper {
             .build()
     }
 
-    fun updateNotification(context: Context, notificationId: Int, hashpower: UInt, difficulty: UInt) {
+    fun updateNotification(context: Context, notificationId: Int, threads: Int, hashpower: UInt, difficulty: UInt) {
       val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-      val notification = buildNotification(context, hashpower, difficulty)
+      val notification = buildNotification(context, threads, hashpower, difficulty)
       notificationManager.notify(notificationId, notification)
   }
 }
