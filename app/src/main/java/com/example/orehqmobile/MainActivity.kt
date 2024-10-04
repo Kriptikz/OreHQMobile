@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
         homeScreenViewModel = ViewModelProvider(this, HomeScreenViewModel.Factory)[HomeScreenViewModel::class.java]
 
         setContent {
-            OreHQMobileTheme {
+            OreHQMobileTheme(true) {
                 OreHQMobileApp(
                     sender,
                     hasEncryptedKeypair,
