@@ -203,11 +203,15 @@ fun MiningScreen(
         modifier = Modifier.padding(top = 32.dp)
     )
 
-    Button(
-        onClick = onClickClaim,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Text("Claim All")
+    if (claimableBalance >= 0.005) {
+        Button(
+            onClick = onClickClaim,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Claim All")
+        }
+    } else {
+        Text("Minimum claim amount is 0.005")
     }
 
 }
