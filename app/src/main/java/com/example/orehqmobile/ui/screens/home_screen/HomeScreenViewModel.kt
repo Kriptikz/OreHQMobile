@@ -2,7 +2,6 @@ package com.example.orehqmobile.ui.screens.home_screen
 
 import android.net.Uri
 import android.util.Log
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -17,30 +16,23 @@ import com.example.orehqmobile.data.entities.Wallet
 import com.example.orehqmobile.data.repositories.IKeypairRepository
 import com.example.orehqmobile.data.repositories.IPoolRepository
 import com.example.orehqmobile.data.repositories.ISolanaRepository
-import com.example.orehqmobile.data.models.Ed25519PublicKey
-import com.example.orehqmobile.data.models.ServerMessage
 import com.example.orehqmobile.data.models.toLittleEndianByteArray
 import com.example.orehqmobile.data.repositories.WalletRepository
 import com.funkatronics.encoders.Base58
-import com.funkatronics.encoders.Base64
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
 import com.solana.mobilewalletadapter.clientlib.MobileWalletAdapter
 import com.solana.mobilewalletadapter.clientlib.Solana
 import com.solana.mobilewalletadapter.clientlib.TransactionResult
 import com.solana.mobilewalletadapter.clientlib.successPayload
-import com.solana.transaction.blockhash
-import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
-import uniffi.orehqmobileffi.DxSolution
+import kotlin.math.pow
 
 data class HomeUiState(
     var availableThreads: Int,
@@ -48,7 +40,6 @@ data class HomeUiState(
     var difficulty: UInt,
     var lastDifficulty: UInt,
     var selectedThreads: Int,
-    var isMiningEnabled: Boolean,
     var solBalance: Double,
     var claimableBalance: Double,
     var walletTokenBalance: Double,
@@ -57,6 +48,7 @@ data class HomeUiState(
     var poolMultiplier: Double,
     var topStake: Double,
     var isSignedUp: Boolean,
+    var isProcessingSignup: Boolean,
     var isLoadingUi: Boolean,
     var secureWalletPubkey: String?,
 )
@@ -78,7 +70,6 @@ class HomeScreenViewModel(
             difficulty = 0u,
             lastDifficulty = 0u,
             selectedThreads =  1,
-            isMiningEnabled = false,
             claimableBalance = 0.0,
             solBalance = 0.0,
             walletTokenBalance = 0.0,
@@ -87,6 +78,7 @@ class HomeScreenViewModel(
             poolMultiplier = 0.0,
             topStake = 0.0,
             isSignedUp = false,
+            isProcessingSignup = false,
             isLoadingUi = true,
             secureWalletPubkey = null,
         )
@@ -99,13 +91,14 @@ class HomeScreenViewModel(
     private val iconUri = Uri.parse("favicon.ico") // resolves to https://yourdapp.com/favicon.ico
     private val identityName = "Ore HQ Mobile"
 
-    private var walletAdapter = MobileWalletAdapter(connectionIdentity =
+    private val walletAdapter = MobileWalletAdapter(connectionIdentity =
         ConnectionIdentity(
             identityUri = solanaUri,
             iconUri = iconUri,
-            identityName = identityName
+            identityName = identityName,
         )
     )
+
 
 
     init {
@@ -326,184 +319,9 @@ class HomeScreenViewModel(
 ////        Log.d("HomeScreenViewModel", "Keypair JSON: $keyPairJson")
 //    }
 
-    private fun sendReadyMessage() {
-      viewModelScope.launch(Dispatchers.IO) {
-          try {
-              val now = System.currentTimeMillis() / 1000 // Current time in seconds
-              val msg = now.toLittleEndianByteArray()
-              val sig = solanaRepository.signMessage(msg, listOf(keypair!!)).signature
-              val publicKey = (keypair!!.public as Ed25519PublicKeyParameters).encoded
-
-              val binData = ByteArray(1 + 32 + 8 + sig.size).apply {
-                  this[0] = 0 // Ready message type
-                  System.arraycopy(publicKey, 0, this, 1, 32)
-                  System.arraycopy(msg, 0, this, 33, 8)
-                  System.arraycopy(sig, 0, this, 41, sig.size)
-              }
-
-              poolRepository.sendWebSocketMessage(binData)
-              Log.d("HomeScreenViewModel", "Sent Ready message")
-          } catch (e: Exception) {
-              Log.e("HomeScreenViewModel", "Error sending Ready message", e)
-          }
-      }
-  }
-
-    private fun sendSubmissionMessage(submission: DxSolution) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val bestHashBin = submission.digest.toUByteArray()
-                val bestNonceBin = submission.nonce.toUByteArray()
-
-                val hashNonceMessage = UByteArray(24)
-                bestHashBin.copyInto(hashNonceMessage, 0, 0, 16)
-                bestNonceBin.copyInto(hashNonceMessage, 16, 0, 8)
-
-                val signature = solanaRepository.signMessage(hashNonceMessage.toByteArray(), listOf(keypair!!)).signature
-                val publicKey = (keypair!!.public as Ed25519PublicKeyParameters).encoded
-
-                // Convert signature to Base58 string
-                val signatureBase58 = Base58.encodeToString(signature)
-
-                val binData = ByteArray(57 + signatureBase58.toByteArray().size).apply {
-                    this[0] = 2 // BestSolution Message
-                    System.arraycopy(bestHashBin.toByteArray(), 0, this, 1, 16)
-                    System.arraycopy(bestNonceBin.toByteArray(), 0, this, 17, 8)
-                    System.arraycopy(publicKey, 0, this, 25, 32)
-                    System.arraycopy(signatureBase58.toByteArray(), 0, this, 57, signatureBase58.toByteArray().size)
-                }
-
-                poolRepository.sendWebSocketMessage(binData)
-                Log.d("HomeScreenViewModel", "Sent BestSolution message")
-            } catch (e: Exception) {
-                Log.e("HomeScreenViewModel", "Error sending BestSolution message", e)
-            }
-        }
-    }
-
-//    private fun UByteArray.toByteArray(): ByteArray = ByteArray(size) { this[it].toByte() }
-//    private fun List<UByte>.toUByteArray(): UByteArray = UByteArray(size) { this[it] }
-
-    fun decreaseSelectedThreads() {
-        if (homeUiState.selectedThreads > 1) {
-            homeUiState = homeUiState.copy(selectedThreads = homeUiState.selectedThreads - 1)
-        }
-    }
-
-    fun increaseSelectedThreads() {
-        if (homeUiState.selectedThreads < homeUiState.availableThreads) {
-            homeUiState = homeUiState.copy(selectedThreads = homeUiState.selectedThreads + 1)
-        }
-    }
-
-    private fun handleStartMining(startMining: ServerMessage.StartMining) {
-        Log.d("HomeScreenViewModel", "Received StartMining: hash=${Base64.encodeToString(startMining.challenge.toByteArray())}, " +
-            "nonceRange=${startMining.nonceRange}, cutoff=${startMining.cutoff}")
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val challenge: List<UByte> = startMining.challenge.toList()
-
-                var currentNonce = startMining.nonceRange.first
-                val lastNonce = startMining.nonceRange.last
-                val noncesPerThread = 10_000uL
-                var secondsOfRuntime = startMining.cutoff + 5uL
-
-                var bestDifficulty = 0u
-
-                while(homeUiState.isMiningEnabled) {
-                    val startTime = System.nanoTime()
-                    Log.d("HomeScreenViewModel", "Seconds of run time: $secondsOfRuntime")
-                    val maxBatchRuntime = 10uL // 10 seconds
-                    val currentBatchMaxRuntime = minOf(secondsOfRuntime, maxBatchRuntime)
-                    val jobs = List(homeUiState.selectedThreads) {
-                        val nonceForThisJob = currentNonce
-                        currentNonce += noncesPerThread
-                        async(Dispatchers.Default) {
-                            uniffi.orehqmobileffi.dxHash(challenge, currentBatchMaxRuntime, nonceForThisJob, lastNonce)
-                        }
-                    }
-                    val results = jobs.awaitAll()
-                    val endTime = System.nanoTime()
-
-                    val totalNoncesChecked = results.sumOf { it.noncesChecked }
-                    val elapsedTimeSeconds = if (endTime >= startTime) {
-                        (endTime - startTime) / 1_000_000_000.0
-                    } else {
-                        0.0
-                    }
-
-                    if (secondsOfRuntime >= elapsedTimeSeconds.toUInt()) {
-                        secondsOfRuntime -= elapsedTimeSeconds.toUInt()
-                    }
-                    val newHashrate = (totalNoncesChecked.toDouble() / elapsedTimeSeconds).toUInt()
-
-                    val bestResult = results.maxByOrNull { it.difficulty }
-                    if (bestResult != null) {
-                        if (bestResult.difficulty > bestDifficulty) {
-                            bestDifficulty = bestResult.difficulty
-                            bestResult.let { solution ->
-                                Log.d("HomeScreenViewModel", "Send submission with diff: ${solution.difficulty}")
-                                sendSubmissionMessage(solution)
-                            }
-
-                            homeUiState = homeUiState.copy(
-                                difficulty = bestResult.difficulty ?: 0u
-                            )
-                        }
-                    }
-
-                    Log.d("HomeScreenViewModel", "Hashpower: $newHashrate")
-                    homeUiState = homeUiState.copy(
-                        hashRate = newHashrate,
-                    )
-
-                    if (secondsOfRuntime <= 2u) {
-                        break;
-                    }
-                }
-
-                if (homeUiState.isMiningEnabled) {
-                    sendReadyMessage()
-                }
-                // reset best diff
-                homeUiState = homeUiState.copy(
-                    difficulty = 0u,
-                    lastDifficulty = homeUiState.difficulty
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
-                withContext(Dispatchers.Main) {
-//                    hashrate = "Error: ${e.message}"
-//                    difficulty = "Error occurred"
-                }
-            }
-        }
-    }
-
-    private fun handlePoolSubmissionResult(poolSubmissionResult: ServerMessage.PoolSubmissionResult) {
-        Log.d("HomeScreenViewModel", "Received pool submission result:")
-        Log.d("HomeScreenViewModel", "Difficulty: ${poolSubmissionResult.difficulty}")
-        Log.d("HomeScreenViewModel", "Total Balance: ${"%.11f".format(poolSubmissionResult.totalBalance)}")
-        Log.d("HomeScreenViewModel", "Total Rewards: ${"%.11f".format(poolSubmissionResult.totalRewards)}")
-        Log.d("HomeScreenViewModel", "Top Stake: ${"%.11f".format(poolSubmissionResult.topStake)}")
-        Log.d("HomeScreenViewModel", "Multiplier: ${"%.11f".format(poolSubmissionResult.multiplier)}")
-        Log.d("HomeScreenViewModel", "Active Miners: ${poolSubmissionResult.activeMiners}")
-        Log.d("HomeScreenViewModel", "Challenge: ${poolSubmissionResult.challenge.joinToString(", ")}")
-        Log.d("HomeScreenViewModel", "Best Nonce: ${poolSubmissionResult.bestNonce}")
-        Log.d("HomeScreenViewModel", "Miner Supplied Difficulty: ${poolSubmissionResult.minerSuppliedDifficulty}")
-        Log.d("HomeScreenViewModel", "Miner Earned Rewards: ${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}")
-        Log.d("HomeScreenViewModel", "Miner Percentage: ${"%.11f".format(poolSubmissionResult.minerPercentage)}")
-
-        homeUiState = homeUiState.copy(
-            activeMiners = poolSubmissionResult.activeMiners.toInt(),
-            poolBalance = poolSubmissionResult.totalBalance,
-            topStake = poolSubmissionResult.topStake,
-            poolMultiplier = poolSubmissionResult.multiplier,
-        )
-    }
-
     fun signUpClicked() {
         Log.d("HomeScreenViewModel", "Sign Up Clicked!")
+        homeUiState = homeUiState.copy(isProcessingSignup = true)
         viewModelScope.launch(Dispatchers.IO) {
             if (keypair != null) {
                     val latestBlockhash = poolRepository.fetchLatestBlockhash()
@@ -538,20 +356,47 @@ class HomeScreenViewModel(
                             Log.e("HomeScreenViewModel", "Error fetching latest blockhash", error)
                         }
                     )
+                withContext(Dispatchers.Main) {
+                    homeUiState = homeUiState.copy(isProcessingSignup = false)
+                }
             }
         }
     }
 
-    fun toggleMining() {
-        val toggled = !homeUiState.isMiningEnabled
+    fun onClaimClicked() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val minerPubkey = Base58.encodeToString((keypair!!.public as Ed25519PublicKeyParameters).encoded)
+            val receiverPubkey = homeUiState.secureWalletPubkey!!
 
-        if (toggled) {
-            sendReadyMessage()
+            val result = poolRepository.fetchTimestamp()
+            result.fold(
+                onSuccess = { timestamp ->
+                    Log.d(TAG, "Fetched timestamp: $timestamp")
+                    val claimAmountGrains = (homeUiState.claimableBalance * 10.0.pow(11.0)).toULong()
+                    val tsBytes = timestamp.toLittleEndianByteArray()
+                    val receiverPubkeyBytes = Base58.decode(receiverPubkey)
+                    val claimAmountBytes = claimAmountGrains.toLittleEndianByteArray()
+
+                    var msgBytes = tsBytes + receiverPubkeyBytes + claimAmountBytes
+
+                    val sig = Base58.encodeToString(solanaRepository.signMessage(msgBytes, listOf(keypair!!)).signature)
+
+                    val claimResult = poolRepository.claim(timestamp, sig, minerPubkey, receiverPubkey, claimAmountGrains)
+                    claimResult.fold(
+                        onSuccess = {
+                            Log.d(TAG, "Successfully queued claim request.")
+                        },
+                        onFailure = { error ->
+                            Log.e(TAG, "Error claiming", error)
+                        }
+                    )
+                },
+                onFailure = { error ->
+                    Log.e(TAG, "Error fetching timestamp", error)
+                }
+            )
         }
 
-        homeUiState = homeUiState.copy(
-            isMiningEnabled = toggled
-        )
     }
 
     fun connectSecureWallet(activity_sender: ActivityResultSender) {
@@ -619,6 +464,8 @@ class HomeScreenViewModel(
             latestBlockhash.fold(
                 onSuccess = { latestBlockhash ->
                     val result = walletAdapter.transact(activity_sender) { authResult ->
+
+                        Log.d(TAG, "GOT AUTH RESULT")
                         val receiverPubkey = homeUiState.secureWalletPubkey!!
                         val senderPubkey = solanaRepository.base58Encode((keypair!!.public as Ed25519PublicKeyParameters).encoded)
 
@@ -670,6 +517,7 @@ class HomeScreenViewModel(
     }
 
     companion object {
+        private const val TAG = "HomeScreenViewModel"
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val application =

@@ -38,6 +38,7 @@ fun HomeScreen(
     onClickConnectWallet: () -> Unit,
     onClickDepositSol: () -> Unit,
     onClickWithdrawSol: () -> Unit,
+    onClickClaim: () -> Unit,
 ) {
     OreHQMobileScaffold(title = "Home", displayTopBar = true) {
         Column(
@@ -61,6 +62,7 @@ fun HomeScreen(
                         onIncreaseSelectedThreads,
                         onDecreaseSelectedThreads,
                         onToggleMining,
+                        onClickClaim,
                     )
                 } else {
                     SignUpScreen(
@@ -88,7 +90,6 @@ fun HomeScreenPreview() {
                 difficulty = 0u,
                 lastDifficulty = 0u,
                 selectedThreads =  1,
-                isMiningEnabled = false,
                 claimableBalance = 0.0,
                 solBalance = 0.0,
                 walletTokenBalance = 0.0,
@@ -97,6 +98,7 @@ fun HomeScreenPreview() {
                 topStake = 0.0,
                 poolMultiplier = 0.0,
                 isSignedUp = false,
+                isProcessingSignup = false,
                 isLoadingUi = false,
                 secureWalletPubkey = null,
             ),
@@ -112,6 +114,7 @@ fun HomeScreenPreview() {
             onClickConnectWallet = {},
             onClickDepositSol = {},
             onClickWithdrawSol = {},
+            onClickClaim = {},
         )
     }
 }
@@ -127,11 +130,11 @@ fun MiningScreen(
     onIncreaseSelectedThreads: () -> Unit,
     onDecreaseSelectedThreads: () -> Unit,
     onToggleMining: () -> Unit,
+    onClickClaim: () -> Unit,
 ) {
     val difficulty = difficulty
     val lastDifficulty = lastDifficulty
     val availableThreads = homeUiState.availableThreads
-    val isMiningEnabled = homeUiState.isMiningEnabled
     val claimableBalance = homeUiState.claimableBalance
     val walletTokenBalance = homeUiState.walletTokenBalance
     val activeMiners = homeUiState.activeMiners
@@ -144,12 +147,6 @@ fun MiningScreen(
         text = "Wallet: $walletTokenBalance ORE",
         style = MaterialTheme.typography.bodyLarge,
         modifier = Modifier.padding(top = 32.dp)
-    )
-    // Mining status
-    Text(
-        text = if (isMiningEnabled) "Mining..." else "Stopped",
-        style = MaterialTheme.typography.headlineSmall,
-        modifier = Modifier.padding(bottom = 16.dp)
     )
 
     Text(text = "Active Miners: $activeMiners", modifier = Modifier.padding(bottom = 8.dp))
@@ -206,6 +203,13 @@ fun MiningScreen(
         modifier = Modifier.padding(top = 32.dp)
     )
 
+    Button(
+        onClick = onClickClaim,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Claim All")
+    }
+
 }
 
 @Composable
@@ -221,6 +225,7 @@ fun SignUpScreen(
     if (homeUiState.solBalance >= 0.001005) {
         Button(
             onClick = onClickSignUp,
+            enabled = !homeUiState.isProcessingSignup,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Sign Up")

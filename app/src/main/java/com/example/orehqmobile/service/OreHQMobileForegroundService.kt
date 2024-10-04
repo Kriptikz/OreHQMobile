@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
+import uniffi.orehqmobileffi.DxSolution
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -163,13 +164,13 @@ class OreHQMobileForegroundService : Service() {
                 var currentNonce = startMining.nonceRange.first
                 val lastNonce = startMining.nonceRange.last
                 val noncesPerThread = 10_000uL
-                var secondsOfRuntime = startMining.cutoff + 5uL
+                var secondsOfRuntime = startMining.cutoff
 
                 var bestDifficulty = 0u
 
                 while(true) {
                     val startTime = System.nanoTime()
-                    Log.d("HomeScreenViewModel", "Seconds of run time: $secondsOfRuntime")
+                    Log.d(TAG, "Seconds of run time: $secondsOfRuntime")
                     val maxBatchRuntime = 10uL // 10 seconds
                     val currentBatchMaxRuntime = minOf(secondsOfRuntime, maxBatchRuntime)
                     val jobs = List(_threadCount.value) {
@@ -200,7 +201,7 @@ class OreHQMobileForegroundService : Service() {
                             bestDifficulty = bestResult.difficulty
                             bestResult.let { solution ->
                                 Log.d(TAG, "Send submission with diff: ${solution.difficulty}")
-                                //sendSubmissionMessage(solution)
+                                sendSubmissionMessage(solution)
                             }
                         }
                     }
@@ -268,7 +269,7 @@ class OreHQMobileForegroundService : Service() {
                                         // Process the data as needed
                                         when (serverMessage) {
                                             is ServerMessage.StartMining -> handleStartMining(serverMessage)
-                                            is ServerMessage.PoolSubmissionResult -> {}//handlePoolSubmissionResult(serverMessage)
+                                            is ServerMessage.PoolSubmissionResult -> { handlePoolSubmissionResult(serverMessage) }
                                         }
                                     }
 
@@ -336,6 +337,53 @@ class OreHQMobileForegroundService : Service() {
                 Log.d(TAG, "Sent Ready message")
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending Ready message", e)
+            }
+        }
+    }
+
+    private fun handlePoolSubmissionResult(poolSubmissionResult: ServerMessage.PoolSubmissionResult) {
+        Log.d(TAG, "Received pool submission result:")
+        Log.d(TAG, "Difficulty: ${poolSubmissionResult.difficulty}")
+        Log.d(TAG, "Total Balance: ${"%.11f".format(poolSubmissionResult.totalBalance)}")
+        Log.d(TAG, "Total Rewards: ${"%.11f".format(poolSubmissionResult.totalRewards)}")
+        Log.d(TAG, "Top Stake: ${"%.11f".format(poolSubmissionResult.topStake)}")
+        Log.d(TAG, "Multiplier: ${"%.11f".format(poolSubmissionResult.multiplier)}")
+        Log.d(TAG, "Active Miners: ${poolSubmissionResult.activeMiners}")
+        Log.d(TAG, "Challenge: ${poolSubmissionResult.challenge.joinToString(", ")}")
+        Log.d(TAG, "Best Nonce: ${poolSubmissionResult.bestNonce}")
+        Log.d(TAG, "Miner Supplied Difficulty: ${poolSubmissionResult.minerSuppliedDifficulty}")
+        Log.d(TAG, "Miner Earned Rewards: ${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}")
+        Log.d(TAG, "Miner Percentage: ${"%.11f".format(poolSubmissionResult.minerPercentage)}")
+    }
+
+    private fun sendSubmissionMessage(submission: DxSolution) {
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val bestHashBin = submission.digest.toUByteArray()
+                val bestNonceBin = submission.nonce.toUByteArray()
+
+                val hashNonceMessage = UByteArray(24)
+                bestHashBin.copyInto(hashNonceMessage, 0, 0, 16)
+                bestNonceBin.copyInto(hashNonceMessage, 16, 0, 8)
+
+                val sig = signData(hashNonceMessage.toByteArray())
+                val publicKey = Base58.decode(pubkey!!)
+
+                // Convert signature to Base58 string
+                val signatureBase58 = Base58.encodeToString(sig!!)
+
+                val binData = ByteArray(57 + signatureBase58.toByteArray().size).apply {
+                    this[0] = 2 // BestSolution Message
+                    System.arraycopy(bestHashBin.toByteArray(), 0, this, 1, 16)
+                    System.arraycopy(bestNonceBin.toByteArray(), 0, this, 17, 8)
+                    System.arraycopy(publicKey, 0, this, 25, 32)
+                    System.arraycopy(signatureBase58.toByteArray(), 0, this, 57, signatureBase58.toByteArray().size)
+                }
+
+                poolRepository.sendWebSocketMessage(binData)
+                Log.d(TAG, "Sent BestSolution message")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending BestSolution message", e)
             }
         }
     }

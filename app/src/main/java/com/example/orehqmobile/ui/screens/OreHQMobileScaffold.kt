@@ -30,7 +30,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// TODO: fix padding issue
 @Composable
 fun OreHQMobileScaffold(title: String, displayTopBar: Boolean, modifier: Modifier = Modifier, screenContent: @Composable () -> Unit) {
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()

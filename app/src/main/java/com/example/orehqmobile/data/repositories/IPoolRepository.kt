@@ -45,6 +45,13 @@ interface IPoolRepository {
     suspend fun fetchSolBalance(publicKey: String): Result<Double>
     suspend fun fetchSignupFee(): Result<Double>
     suspend fun signup(publicKey: String, signedTx: String): Result<String>
+    suspend fun claim(
+        timestamp: ULong,
+        signature: String,
+        minerPubkey: String,
+        receiverPubkey: String,
+        amount: ULong,
+    ): Result<String>
 }
 
 const val HOST_URL = "ec1ipse.me"
@@ -240,6 +247,31 @@ class PoolRepository : IPoolRepository {
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    override suspend fun claim(
+        timestamp: ULong,
+        signature: String,
+        minerPubkey: String,
+        receiverPubkey: String,
+        amount: ULong,
+    ): Result<String> {
+        try {
+            Log.d("PoolRepository", "Claiming $amount ORE to $receiverPubkey")
+            val auth = Base64.getEncoder().encodeToString("${minerPubkey}:${signature}".toByteArray())
+            val response: HttpResponse =
+                client.post("https://$HOST_URL/v2/claim?timestamp=$timestamp&receiver_pubkey=$receiverPubkey&amount=$amount") {
+                    header(HttpHeaders.Host, HOST_URL)
+                    header(HttpHeaders.Authorization, "Basic $auth")
+                }
+            return if (response.status.value in 200..299) {
+                Result.success(response.bodyAsText())
+            } else {
+                Result.failure(IOException("HTTP error ${response.status.value}: ${response.bodyAsText()}"))
+            }
+        } catch (e: Exception) {
+            return Result.failure(e)
         }
     }
 }

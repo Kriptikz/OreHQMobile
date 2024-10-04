@@ -3,6 +3,7 @@ package com.example.orehqmobile
 import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -21,14 +22,14 @@ import androidx.lifecycle.lifecycleScope
 import com.example.orehqmobile.data.repositories.KeypairRepository
 import com.example.orehqmobile.service.OreHQMobileForegroundService
 import com.example.orehqmobile.ui.OreHQMobileApp
-import com.example.orehqmobile.ui.screens.ForegroundServiceSampleScreen
 import com.example.orehqmobile.ui.screens.home_screen.HomeScreenViewModel
 import com.example.orehqmobile.ui.theme.OreHQMobileTheme
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
+import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
+import com.solana.mobilewalletadapter.clientlib.MobileWalletAdapter
+import com.solana.mobilewalletadapter.clientlib.Solana
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 
 class MainActivity : ComponentActivity() {
     private lateinit var homeScreenViewModel: HomeScreenViewModel
@@ -83,7 +84,6 @@ class MainActivity : ComponentActivity() {
         val sender = ActivityResultSender(this)
 
         homeScreenViewModel = ViewModelProvider(this, HomeScreenViewModel.Factory)[HomeScreenViewModel::class.java]
-
 
         setContent {
             OreHQMobileTheme {

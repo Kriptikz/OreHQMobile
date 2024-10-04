@@ -61,6 +61,7 @@ fun OreHQMobileApp(
                 onClickConnectWallet = { homeScreenViewModel.connectSecureWallet(activity_sender) },
                 onClickDepositSol = { homeScreenViewModel.depositSol(activity_sender) },
                 onClickWithdrawSol = { homeScreenViewModel.withdrawSol(activity_sender) },
+                onClickClaim = { homeScreenViewModel.onClaimClicked() },
             )
         }
         composable("newWalletStartScreen") {
