@@ -9,7 +9,7 @@ import com.example.orehqmobile.data.daos.WalletDao
 import com.example.orehqmobile.data.entities.SubmissionResult
 import com.example.orehqmobile.data.entities.Wallet
 
-@Database(entities = [(Wallet::class), (SubmissionResult::class)], version = 1)
+@Database(entities = [(Wallet::class), (SubmissionResult::class)], version = 2)
 abstract class AppRoomDatabase: RoomDatabase() {
 
     abstract fun walletDao(): WalletDao
