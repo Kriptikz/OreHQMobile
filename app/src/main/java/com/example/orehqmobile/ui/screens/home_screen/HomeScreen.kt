@@ -62,7 +62,7 @@ fun HomeScreen(
             if (homeUiState.isLoadingUi) {
                 CircularProgressIndicator()
             } else {
-                if (homeUiState.isSignedUp) {
+                if (homeUiState.isSignedUp && homeUiState.secureWalletPubkey != null) {
                     MiningScreen(
                         homeUiState = homeUiState,
                         serviceRunning = serviceRunning,
@@ -293,17 +293,19 @@ fun SignUpScreen(
 ) {
     Text("Sol Balance: ${homeUiState.solBalance}")
 
-    if (homeUiState.solBalance >= 0.001005) {
-        Text("Entry fee is 0.001005 SOL")
-        Button(
-            onClick = onClickSignUp,
-            enabled = !homeUiState.isProcessingSignup,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Sign Up")
+    if (!homeUiState.isSignedUp) {
+        if (homeUiState.solBalance >= 0.001005) {
+            Text("Entry fee is 0.001005 SOL")
+            Button(
+                onClick = onClickSignUp,
+                enabled = !homeUiState.isProcessingSignup,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Sign Up")
+            }
+        } else {
+            Text("Please deposit sol for signup")
         }
-    } else {
-        Text("Please deposit sol for signup")
     }
 
     if (homeUiState.secureWalletPubkey != null) {

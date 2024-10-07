@@ -137,8 +137,6 @@ class HomeScreenViewModel(
                 }
 
                 val submissionResults = submissionResultRepository.getAllSubmissionResults()
-
-                Log.d(TAG, "PoolSubmissionResults: ${submissionResults[0].id}, ${submissionResults[0].poolDifficulty} ")
                 homeUiState = homeUiState.copy(submissionResults = submissionResults)
 
 
@@ -424,6 +422,30 @@ class HomeScreenViewModel(
                 }
             }
         }
+    }
+
+    public fun setPoolbalance(newPoolBalance: Double) {
+        homeUiState = homeUiState.copy(
+            poolBalance = newPoolBalance
+        )
+    }
+
+    public fun setTopStake(newTopStake: Double) {
+        homeUiState = homeUiState.copy(
+            topStake = newTopStake
+        )
+    }
+
+    public fun setPoolMultiplier(newPoolMultiplier: Double) {
+        homeUiState = homeUiState.copy(
+            poolMultiplier = newPoolMultiplier
+        )
+    }
+
+    public fun setActiveMiners(newActiveMiners: Int) {
+        homeUiState = homeUiState.copy(
+            activeMiners = newActiveMiners
+        )
     }
 
     fun disconnectSecureWallet(activity_sender: ActivityResultSender) {

@@ -66,6 +66,18 @@ class OreHQMobileForegroundService : Service() {
     private val _lastDifficulty = MutableStateFlow<UInt>(0u)
     var lastDifficulty: StateFlow<UInt> = _lastDifficulty
 
+    private val _poolBalance = MutableStateFlow<Double>(0.0)
+    var poolBalance: StateFlow<Double> = _poolBalance
+
+    private val _topStake = MutableStateFlow<Double>(0.0)
+    var topStake: StateFlow<Double> = _topStake
+
+    private val _poolMultiplier = MutableStateFlow<Double>(0.0)
+    var poolMultiplier: StateFlow<Double> = _poolMultiplier
+
+    private val _activeMiners = MutableStateFlow<UInt>(0u)
+    var activeMiners: StateFlow<UInt> = _activeMiners
+
     private var keepMining = true
     private var isWebsocketConnected = false
     private var pubkey: String? = null
@@ -363,6 +375,10 @@ class OreHQMobileForegroundService : Service() {
         Log.d(TAG, "Miner Earned Rewards: ${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}")
         Log.d(TAG, "Miner Percentage: ${"%.11f".format(poolSubmissionResult.minerPercentage)}")
 
+        _poolBalance.value = poolSubmissionResult.totalBalance
+        _poolMultiplier.value = poolSubmissionResult.multiplier
+        _topStake.value = poolSubmissionResult.topStake
+        _activeMiners.value = poolSubmissionResult.activeMiners
 
         val totalRewards = (poolSubmissionResult.totalRewards * 10.0.pow(11.0)).toLong()
         val earnings = (poolSubmissionResult.minerEarnedRewards * 10.0.pow(11.0)).toLong()

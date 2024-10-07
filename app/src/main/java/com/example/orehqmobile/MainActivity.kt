@@ -175,6 +175,26 @@ class MainActivity : ComponentActivity() {
                 lastDifficulty = it
             }
         }
+        lifecycleScope.launch {
+            oreHQMobileService?.poolBalance?.collectLatest { it ->
+                homeScreenViewModel.setPoolbalance(it)
+            }
+        }
+        lifecycleScope.launch {
+            oreHQMobileService?.topStake?.collectLatest { it ->
+                homeScreenViewModel.setTopStake(it)
+            }
+        }
+        lifecycleScope.launch {
+            oreHQMobileService?.poolMultiplier?.collectLatest { it ->
+                homeScreenViewModel.setPoolMultiplier(it)
+            }
+        }
+        lifecycleScope.launch {
+            oreHQMobileService?.activeMiners?.collectLatest { it ->
+                homeScreenViewModel.setActiveMiners(it.toInt())
+            }
+        }
     }
 
     companion object {
