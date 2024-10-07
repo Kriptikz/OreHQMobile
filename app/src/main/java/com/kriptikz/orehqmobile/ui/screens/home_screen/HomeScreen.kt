@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -35,18 +36,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import com.kriptikz.orehqmobile.data.entities.SubmissionResult
 import com.kriptikz.orehqmobile.ui.screens.OreHQMobileScaffold
 import com.kriptikz.orehqmobile.ui.theme.OreHQMobileTheme
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 @Composable
 fun HomeScreen(
@@ -56,13 +61,12 @@ fun HomeScreen(
     hashpower: UInt,
     difficulty: UInt,
     lastDifficulty: UInt,
-    onIncreaseSelectedThreads: () -> Unit,
-    onDecreaseSelectedThreads: () -> Unit,
     onToggleMining: () -> Unit,
     onClickSignup: () -> Unit,
     onClickConnectWallet: () -> Unit,
     onClickDisconnectWallet: () -> Unit,
     onClickClaim: () -> Unit,
+    onUpdateSelectedThreads: (Int) -> Unit,
 ) {
     OreHQMobileScaffold(title = "Home", displayTopBar = true) {
         Column(
@@ -84,10 +88,9 @@ fun HomeScreen(
                         hashpower = hashpower,
                         difficulty = difficulty,
                         lastDifficulty = lastDifficulty,
-                        onIncreaseSelectedThreads,
-                        onDecreaseSelectedThreads,
                         onToggleMining,
                         onClickClaim,
+                        onUpdateSelectedThreads,
                     )
                 } else {
                     SignUpScreen(
@@ -133,13 +136,12 @@ fun HomeScreenPreview() {
             hashpower = 0u,
             difficulty = 0u,
             lastDifficulty = 0u,
-            onDecreaseSelectedThreads = {},
-            onIncreaseSelectedThreads = {},
             onToggleMining = {},
             onClickSignup = {},
             onClickConnectWallet = {},
             onClickDisconnectWallet = {},
             onClickClaim = {},
+            onUpdateSelectedThreads = {},
         )
     }
 }
@@ -152,10 +154,9 @@ fun MiningScreen(
     hashpower: UInt,
     difficulty: UInt,
     lastDifficulty: UInt,
-    onIncreaseSelectedThreads: () -> Unit,
-    onDecreaseSelectedThreads: () -> Unit,
     onToggleMining: () -> Unit,
     onClickClaim: () -> Unit,
+    onUpdateSelectedThreads: (Int) -> Unit,
 ) {
     val difficulty = difficulty
     val lastDifficulty = lastDifficulty
@@ -217,22 +218,57 @@ fun MiningScreen(
             Text(text = "Difficulty: $difficulty", modifier = Modifier.padding(bottom = 16.dp))
 
             // Thread count selector
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
-                Text(text = "Threads:", modifier = Modifier.padding(end = 8.dp))
-                IconButton(onClick = onDecreaseSelectedThreads) {
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease threads")
-                }
                 Text(
-                    text = threadCount.toString(),
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    text = "Mining Power:",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
-                IconButton(onClick = onIncreaseSelectedThreads) {
-                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase threads")
+                
+                val steps = listOf("Min", "Low", "Med", "High", "Max")
+                val sliderPosition = remember { mutableStateOf((threadCount.toFloat() - 1) / (availableThreads - 1)) }
+                
+                Slider(
+                    value = sliderPosition.value,
+                    enabled = serviceRunning,
+                    onValueChange = { newValue ->
+                        sliderPosition.value = newValue
+                        val newThreadCount = newValue.roundToInt()
+                        onUpdateSelectedThreads(newThreadCount)
+                    },
+                    steps = 3,
+                    valueRange = 0f..4f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = lerp(Color.Green, Color.Red, sliderPosition.value / 4f),
+                        activeTrackColor = lerp(Color.Green, Color.Red, sliderPosition.value / 4f)
+                    )
+                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    steps.forEachIndexed { index, label ->
+                        Text(
+                            text = label,
+                            color = when (index) {
+                                0 -> Color.Green
+                                2 -> Color.Yellow
+                                4 -> Color.Red
+                                else -> Color.Unspecified
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
-                Text(text = "/ $availableThreads", modifier = Modifier.padding(start = 8.dp))
+                
+                Text(
+                    text = "Threads: $threadCount / $availableThreads",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
 
             // Mining toggle button
@@ -355,7 +391,7 @@ fun PublicKeySection(pubkey: String, onCopyPubkey: () -> Unit, isPublicKeyCopied
             shape = MaterialTheme.shapes.small,
             color = MaterialTheme.colorScheme.surfaceVariant,
             modifier = Modifier
-                .width(120.dp)
+                .wrapContentWidth()
                 .clickable(onClick = onCopyPubkey)
         ) {
             Row(
@@ -368,7 +404,6 @@ fun PublicKeySection(pubkey: String, onCopyPubkey: () -> Unit, isPublicKeyCopied
                     text = "$pubkeyFirst5...$pubkeyLast5",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
                 )
                 if (isPublicKeyCopied) {
                     Icon(

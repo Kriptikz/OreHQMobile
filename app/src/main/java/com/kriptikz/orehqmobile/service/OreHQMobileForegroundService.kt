@@ -147,21 +147,19 @@ class OreHQMobileForegroundService : Service() {
         stopSelf()
     }
 
-    fun decreaseSelectedThreads() {
-      _threadCount.value.let { currentCount ->
-          if (currentCount > 1) {
-              _threadCount.value = currentCount - 1
-          }
-      }
-  }
-
-  fun increaseSelectedThreads() {
-      _threadCount.value.let { currentCount ->
-          if (currentCount < runtimeAvailableThreads) {
-              _threadCount.value = currentCount + 1
-          }
-      }
-  }
+    fun updateSelectedThreads(count: Int) {
+        _threadCount.value.let {
+            val newThreadsCount = when (count) {
+                0 -> 1
+                1 -> runtimeAvailableThreads / 3
+                2 -> runtimeAvailableThreads / 2
+                3 -> runtimeAvailableThreads - (runtimeAvailableThreads / 3)
+                4 -> runtimeAvailableThreads
+                else -> runtimeAvailableThreads
+            }
+            _threadCount.value = newThreadsCount
+        }
+    }
 
     private fun handleStartMining(startMining: ServerMessage.StartMining) {
         Log.d(TAG, "Received StartMining: hash=${Base64.encodeToString(startMining.challenge.toByteArray())}, " +
