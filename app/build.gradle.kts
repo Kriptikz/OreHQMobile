@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.orehqmobile"
+    namespace = "com.kriptikz.orehqmobile"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.orehqmobile"
+        applicationId = "com.kriptikz.orehqmobile"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
