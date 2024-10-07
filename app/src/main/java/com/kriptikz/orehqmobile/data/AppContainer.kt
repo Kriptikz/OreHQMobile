@@ -2,6 +2,7 @@ package com.kriptikz.orehqmobile.data
 
 import android.content.Context
 import com.kriptikz.orehqmobile.data.database.AppRoomDatabase
+import com.kriptikz.orehqmobile.data.repositories.AppAccountRepository
 import com.kriptikz.orehqmobile.data.repositories.IKeypairRepository
 import com.kriptikz.orehqmobile.data.repositories.IPoolRepository
 import com.kriptikz.orehqmobile.data.repositories.ISolanaRepository
@@ -17,6 +18,7 @@ interface AppContainer {
     val keypairRepository: IKeypairRepository
     val walletRepository: WalletRepository
     val submissionResultRepository: SubmissionResultRepository
+    val appAccountRepository: AppAccountRepository
 }
 
 class DefaultAppContainer(private val context: Context, private val appDb: AppRoomDatabase): AppContainer {
@@ -40,5 +42,11 @@ class DefaultAppContainer(private val context: Context, private val appDb: AppRo
         val appDb = AppRoomDatabase.getInstance(context)
         val submissionResultDao = appDb.submissionResultDao()
         SubmissionResultRepository(submissionResultDao)
+    }
+
+    override val appAccountRepository: AppAccountRepository by lazy {
+        val appDb = AppRoomDatabase.getInstance(context)
+        val appAccountDao = appDb.appAccountDao()
+        AppAccountRepository(appAccountDao)
     }
 }

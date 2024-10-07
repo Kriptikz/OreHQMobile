@@ -479,6 +479,7 @@ class HomeScreenViewModel(
                 val keypairRepository = application.container.keypairRepository
                 val walletRepository = application.container.walletRepository
                 val submissionResultRepository = application.container.submissionResultRepository
+                val appAccountRepository = application.container.appAccountRepository
                 HomeScreenViewModel(
                     application = application,
                     solanaRepository = solanaRepository,
@@ -486,6 +487,7 @@ class HomeScreenViewModel(
                     keypairRepository = keypairRepository,
                     walletRepository = walletRepository,
                     submissionResultRepository = submissionResultRepository,
+                    appAccountRepository = appAccountRepository,
                 )
             }
         }
