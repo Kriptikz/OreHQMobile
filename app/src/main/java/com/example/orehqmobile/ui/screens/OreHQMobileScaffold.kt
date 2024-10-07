@@ -49,11 +49,11 @@ fun OreHQMobileScaffold(title: String, displayTopBar: Boolean, modifier: Modifie
                             .padding(start = 16.dp)
                     ) {
                         Box {
-                            Icon(
-                                Icons.Default.Menu,
-                                contentDescription = null,
-                                tint = Color.White,
-                            )
+//                            Icon(
+//                                Icons.Default.Menu,
+//                                contentDescription = null,
+//                                tint = Color.White,
+//                            )
                             Text(
                                 text = title,
                                 style = TextStyle(
