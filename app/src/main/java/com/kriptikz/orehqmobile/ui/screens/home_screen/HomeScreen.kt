@@ -1,6 +1,8 @@
 package com.kriptikz.orehqmobile.ui.screens.home_screen
 
+import android.widget.ScrollView
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,9 +11,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
@@ -19,17 +25,24 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kriptikz.orehqmobile.data.entities.SubmissionResult
 import com.kriptikz.orehqmobile.ui.screens.OreHQMobileScaffold
-import com.kriptikz.orehqmobile.ui.screens.home_screen.HomeUiState
 import com.kriptikz.orehqmobile.ui.theme.OreHQMobileTheme
 import java.util.Calendar
 import java.util.Locale
@@ -55,6 +68,7 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
@@ -111,6 +125,7 @@ fun HomeScreenPreview() {
                 isProcessingSignup = false,
                 isLoadingUi = false,
                 secureWalletPubkey = null,
+                minerPubkey = null,
                 submissionResults = emptyList()
             ),
             serviceRunning = false,
@@ -146,11 +161,13 @@ fun MiningScreen(
     val lastDifficulty = lastDifficulty
     val availableThreads = homeUiState.availableThreads
     val claimableBalance = homeUiState.claimableBalance
-    val walletTokenBalance = homeUiState.walletTokenBalance
     val activeMiners = homeUiState.activeMiners
     val poolBalance = homeUiState.poolBalance
     val topStake = homeUiState.topStake
     val poolMultiplier = homeUiState.poolMultiplier
+
+    val clipboardManager: ClipboardManager = LocalClipboardManager.current
+    var isPublicKeyCopied by remember { mutableStateOf(false) }
 
     val screenHeight = LocalConfiguration.current.screenHeightDp
     val listHeight = screenHeight / 3
@@ -163,10 +180,16 @@ fun MiningScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Wallet ORE Balance
-            Text(
-                text = "Wallet: $walletTokenBalance ORE",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 16.dp)
+            val pubkeyString = homeUiState.minerPubkey?.let {
+                it
+            } ?: "Error"
+            PublicKeySection(
+                pubkey = pubkeyString,
+                onCopyPubkey = {
+                    clipboardManager.setText(AnnotatedString(pubkeyString))
+                    isPublicKeyCopied = true
+                },
+                isPublicKeyCopied = isPublicKeyCopied
             )
 
             Text(text = "Active Miners: $activeMiners", modifier = Modifier.padding(bottom = 8.dp))
@@ -293,18 +316,13 @@ fun SignUpScreen(
 ) {
     Text("Sol Balance: ${homeUiState.solBalance}")
 
-    if (!homeUiState.isSignedUp) {
-        if (homeUiState.solBalance >= 0.001005) {
-            Text("Entry fee is 0.001005 SOL")
-            Button(
-                onClick = onClickSignUp,
-                enabled = !homeUiState.isProcessingSignup,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Sign Up")
-            }
-        } else {
-            Text("Please deposit sol for signup")
+    if (!homeUiState.isSignedUp && homeUiState.secureWalletPubkey != null) {
+        Button(
+            onClick = onClickSignUp,
+            enabled = !homeUiState.isProcessingSignup,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Register Miner")
         }
     }
 
@@ -321,6 +339,45 @@ fun SignUpScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Connect Wallet")
+        }
+    }
+}
+
+
+@Composable
+fun PublicKeySection(pubkey: String, onCopyPubkey: () -> Unit, isPublicKeyCopied: Boolean) {
+    Row {
+        Text(
+            text = "Miner Pubkey: ",
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier
+                .width(120.dp)
+                .clickable(onClick = onCopyPubkey)
+        ) {
+            Row(
+                modifier = Modifier.padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val pubkeyFirst5 = pubkey.take(5)
+                val pubkeyLast5 = pubkey.takeLast(5)
+                Text(
+                    text = "$pubkeyFirst5...$pubkeyLast5",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isPublicKeyCopied) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Copied",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
     }
 }

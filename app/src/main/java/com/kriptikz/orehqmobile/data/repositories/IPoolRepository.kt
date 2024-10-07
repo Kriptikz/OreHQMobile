@@ -44,7 +44,7 @@ interface IPoolRepository {
     suspend fun fetchLatestBlockhash(): Result<String>
     suspend fun fetchSolBalance(publicKey: String): Result<Double>
     suspend fun fetchSignupFee(): Result<Double>
-    suspend fun signup(minerPubkey: String, feePayerPubkey: String, signedTx: String): Result<String>
+    suspend fun signup(minerPubkey: String): Result<String>
     suspend fun claim(
         timestamp: ULong,
         signature: String,
@@ -238,11 +238,11 @@ class PoolRepository : IPoolRepository {
         }
     }
 
-    override suspend fun signup(minerPubkey: String, feePayerPubkey: String, signedTx: String): Result<String> {
+    override suspend fun signup(minerPubkey: String): Result<String> {
         return try {
             Log.d("PoolRepository", "Signup with pubkey: $minerPubkey")
-            val response: HttpResponse = client.post("https://$HOST_URL/v2/signup?miner=$minerPubkey&fee_payer=$feePayerPubkey") {
-                setBody(signedTx)
+            val response: HttpResponse = client.post("https://$HOST_URL/v2/signup?miner=$minerPubkey") {
+                setBody("BLANK")
             }
             if (response.status.value in 200..299) {
                 Result.success(response.bodyAsText())

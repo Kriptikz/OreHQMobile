@@ -21,6 +21,8 @@ import com.kriptikz.orehqmobile.data.models.toLittleEndianByteArray
 import com.kriptikz.orehqmobile.data.repositories.SubmissionResultRepository
 import com.kriptikz.orehqmobile.data.repositories.WalletRepository
 import com.funkatronics.encoders.Base58
+import com.kriptikz.orehqmobile.data.entities.AppAccount
+import com.kriptikz.orehqmobile.data.repositories.AppAccountRepository
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
 import com.solana.mobilewalletadapter.clientlib.MobileWalletAdapter
@@ -55,6 +57,7 @@ data class HomeUiState(
     var isProcessingSignup: Boolean,
     var isLoadingUi: Boolean,
     var secureWalletPubkey: String?,
+    var minerPubkey: String?,
     var submissionResults: List<SubmissionResult>
 )
 
@@ -66,8 +69,8 @@ class HomeScreenViewModel(
     private val keypairRepository: IKeypairRepository,
     private val walletRepository: WalletRepository,
     private val submissionResultRepository: SubmissionResultRepository,
+    private val appAccountRepository: AppAccountRepository,
 ) : ViewModel() {
-    private var miningPubkey: String? = null
     private var poolAuthorityPubkey: String? = null
     private var isFetchingUiState = false
     var homeUiState: HomeUiState by mutableStateOf(
@@ -88,6 +91,7 @@ class HomeScreenViewModel(
             isProcessingSignup = false,
             isLoadingUi = true,
             secureWalletPubkey = null,
+            minerPubkey = null,
             submissionResults = emptyList()
         )
     )
@@ -118,12 +122,23 @@ class HomeScreenViewModel(
         loadPoolAuthorityPubkey()
 
         viewModelScope.launch(Dispatchers.IO) {
+            val appAccount = appAccountRepository.getAppAccount()
+
+            if (appAccount != null) {
+                homeUiState = homeUiState.copy(
+                    isSignedUp = appAccount.isSignedUp,
+                    isLoadingUi = false
+                )
+            }
+
             // Fetch miner claimable rewards every 1 minute
             while (true) {
-                if (miningPubkey.isNullOrBlank()) {
-                    miningPubkey = keypairRepository.getPubkey()?.toString()
+                if (homeUiState.minerPubkey.isNullOrBlank()) {
+                    homeUiState = homeUiState.copy(
+                        minerPubkey = keypairRepository.getPubkey()?.toString()
+                    )
                 }
-                val pk = miningPubkey
+                val pk = homeUiState.minerPubkey
                 if ( pk != null && homeUiState.isSignedUp) {
                     val balanceRewardsResult = poolRepository.fetchMinerRewards(pk)
                     balanceRewardsResult.fold(
@@ -152,14 +167,18 @@ class HomeScreenViewModel(
             if (secureWallet.isNotEmpty()) {
                 Log.d(TAG, "Found connected wallet db data.")
                 walletAdapter.authToken = secureWallet[0].authToken
-                homeUiState = homeUiState.copy(
-                    secureWalletPubkey = secureWallet[0].publicKey
-                )
+                withContext(Dispatchers.Main) {
+                    homeUiState = homeUiState.copy(
+                        secureWalletPubkey = secureWallet[0].publicKey
+                    )
+                }
             } else {
                 Log.d(TAG, "No connected wallet data in db.")
-                homeUiState = homeUiState.copy(
-                    isLoadingUi = false
-                )
+                withContext(Dispatchers.Main) {
+                    homeUiState = homeUiState.copy(
+                        isLoadingUi = false
+                    )
+                }
             }
         }
     }
@@ -182,16 +201,18 @@ class HomeScreenViewModel(
 
     fun fetchUiState() {
         viewModelScope.launch(Dispatchers.IO) {
-        if (miningPubkey == null) {
-            miningPubkey = keypairRepository.getPubkey()?.toString()
+        if (homeUiState.minerPubkey == null) {
+            homeUiState = homeUiState.copy(
+                minerPubkey = keypairRepository.getPubkey()?.toString()
+            )
         }
-        val pubkey = miningPubkey
+        val pubkey = homeUiState.minerPubkey
         if (pubkey != null) {
             if (!isFetchingUiState) {
                 isFetchingUiState = true
 
                 val securePubkey = homeUiState.secureWalletPubkey
-                Log.d("HomeScreenViewModel", "Mining Pubkey: $miningPubkey")
+                Log.d("HomeScreenViewModel", "Mining Pubkey: $pubkey")
                 Log.d("HomeScreenViewModel", "Connected Pubkey: $securePubkey")
                     try {
                         // Fetch wallet token balance
@@ -306,69 +327,32 @@ class HomeScreenViewModel(
         Log.d("HomeScreenViewModel", "Sign Up Clicked!")
         homeUiState = homeUiState.copy(isProcessingSignup = true)
         viewModelScope.launch(Dispatchers.IO) {
-            val publicKey = miningPubkey
+            val publicKey = homeUiState.minerPubkey
             val secureWalletPubkey = homeUiState.secureWalletPubkey
             if (publicKey != null && secureWalletPubkey != null) {
-                    val latestBlockhash = poolRepository.fetchLatestBlockhash()
-                    latestBlockhash.fold(
-                        onSuccess = { latestBlockhash ->
-                            val txn = solanaRepository.getSolTransferTransactionWithFeePayer(latestBlockhash, secureWalletPubkey, poolAuthorityPubkey!!, secureWalletPubkey, 1_000_000uL)
-                            if (txn != null) {
-                                val result = walletAdapter.transact(activitySender) { _authResult ->
-                                    signTransactions(arrayOf(txn.serialize()))
-                                }
-                                when (result) {
-                                    is TransactionResult.Success -> {
-                                        val txSignatureBytes = result.successPayload?.signedPayloads?.first()
-                                        txSignatureBytes?.let {
-                                            val t = Transaction.from(txSignatureBytes)
-
-                                            val signedTxn = solanaRepository.base64Encode(txSignatureBytes)
-                                            val signedUp = poolRepository.signup(publicKey, secureWalletPubkey, signedTxn)
-                                            signedUp.fold(
-                                                onSuccess = {
-                                                    Log.d("HomeScreenViewModel", "Successfully signed up!")
-
-                                                    withContext(Dispatchers.Main) {
-                                                        homeUiState = homeUiState.copy(
-                                                            isSignedUp = true
-                                                        )
-                                                    }
-                                                },
-                                                onFailure = { error ->
-                                                    Log.e("HomeScreenViewModel", "Error processing signup request", error)
-                                                }
-                                            )
-                                        }
-                                    }
-                                    is TransactionResult.NoWalletFound -> {
-                                        Log.e("HomeScreenViewModel", "No MWA compatible app wallet found on device.")
-                                    }
-                                    is TransactionResult.Failure -> {
-                                        Log.e("HomeScreenViewModel", "Error connecting to wallet: ${result.e.message}")
-                                    }
-                                }
-
-
-                            } else {
-                                Log.e("HomeScreenViewModel", "Failed to getSolTransferTransaction for signup.")
-                            }
-
-                        },
-                        onFailure = { error ->
-                            Log.e("HomeScreenViewModel", "Error fetching latest blockhash", error)
+                val signedUp = poolRepository.signup(publicKey)
+                signedUp.fold(
+                    onSuccess = {
+                        Log.d("HomeScreenViewModel", "Successfully signed up!")
+                        appAccountRepository.insertAppAccount(AppAccount(publicKey, true))
+                        withContext(Dispatchers.Main) {
+                            homeUiState = homeUiState.copy(
+                                isSignedUp = true
+                            )
                         }
-                    )
-                withContext(Dispatchers.Main) {
-                    homeUiState = homeUiState.copy(isProcessingSignup = false)
-                }
+                    },
+                    onFailure = { error ->
+                        Log.e("HomeScreenViewModel", "Error processing signup request", error)
+                    }
+                )
+                homeUiState = homeUiState.copy(isProcessingSignup = false)
             }
         }
     }
 
     fun onClaimClicked() {
         viewModelScope.launch(Dispatchers.IO) {
-            val minerPubkey = miningPubkey
+            val minerPubkey = homeUiState.minerPubkey
             val receiverPubkey = homeUiState.secureWalletPubkey!!
 
             val result = poolRepository.fetchTimestamp()

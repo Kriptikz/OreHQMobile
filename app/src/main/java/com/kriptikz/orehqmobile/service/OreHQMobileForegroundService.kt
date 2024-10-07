@@ -31,7 +31,6 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.orehqmobileffi.DxSolution
@@ -251,7 +250,7 @@ class OreHQMobileForegroundService : Service() {
         if (!isWebsocketConnected) {
             isWebsocketConnected = true
             coroutineScope.launch(Dispatchers.IO) {
-                while (coroutineScope.isActive) {
+                while (true) {
                     val result = poolRepository.fetchTimestamp()
                     result.fold(
                         onSuccess = { timestamp ->
