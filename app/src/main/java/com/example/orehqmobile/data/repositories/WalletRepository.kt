@@ -24,7 +24,7 @@ class WalletRepository(private val walletDao: WalletDao) {
         return walletDao.findWalletByPublicKey(publicKey)
     }
 
-    suspend fun getAllWallets(): List<Wallet> {
+    fun getAllWallets(): List<Wallet> {
         return walletDao.getAllWallets()
     }
 

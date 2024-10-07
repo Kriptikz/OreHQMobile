@@ -14,11 +14,6 @@ import com.example.orehqmobile.ui.screens.home_screen.HomeScreenViewModel
 import com.example.orehqmobile.ui.screens.new_created_wallet_screen.CreatedWalletScreen
 import com.example.orehqmobile.ui.screens.new_created_wallet_screen.CreatedWalletScreenViewModel
 import com.example.orehqmobile.ui.screens.new_wallet_start_screen.NewWalletScreen
-import com.example.orehqmobile.ui.screens.new_wallet_start_screen.NewWalletStartScreenViewModel
-import com.example.orehqmobile.ui.screens.save_with_passcode_screen.SaveWithPasscodeScreen
-import com.example.orehqmobile.ui.screens.save_with_passcode_screen.SaveWithPasscodeScreenViewModel
-import com.example.orehqmobile.ui.screens.unlock_screen.UnlockScreen
-import com.example.orehqmobile.ui.screens.unlock_screen.UnlockScreenViewModel
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 
 @Composable
@@ -34,13 +29,12 @@ fun OreHQMobileApp(
     serviceRunning: Boolean,
     homeScreenViewModel: HomeScreenViewModel = viewModel(factory = HomeScreenViewModel.Factory),
     createdWalletScreenViewModel: CreatedWalletScreenViewModel = viewModel(factory = CreatedWalletScreenViewModel.Factory),
-    saveWithPasscodeScreenViewModel: SaveWithPasscodeScreenViewModel = viewModel(factory = SaveWithPasscodeScreenViewModel.Factory),
-    unlockScreenViewModel: UnlockScreenViewModel = viewModel(factory = UnlockScreenViewModel.Factory),
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
     val startDestination = if(hasEncryptedKey) {
-        "unlockScreen"
+        homeScreenViewModel.fetchUiState()
+        "homeScreen"
     } else {
         "newWalletStartScreen"
     }
@@ -57,10 +51,9 @@ fun OreHQMobileApp(
                 onIncreaseSelectedThreads = { oreHqMobileService?.increaseSelectedThreads() },
                 onDecreaseSelectedThreads = { oreHqMobileService?.decreaseSelectedThreads() },
                 onToggleMining = onClickService,
-                onClickSignup = { homeScreenViewModel.signUpClicked() },
+                onClickSignup = { homeScreenViewModel.signUpClicked(activity_sender) },
                 onClickConnectWallet = { homeScreenViewModel.connectSecureWallet(activity_sender) },
-                onClickDepositSol = { homeScreenViewModel.depositSol(activity_sender) },
-                onClickWithdrawSol = { homeScreenViewModel.withdrawSol(activity_sender) },
+                onClickDisconnectWallet = { homeScreenViewModel.disconnectSecureWallet(activity_sender) },
                 onClickClaim = { homeScreenViewModel.onClaimClicked() },
             )
         }
@@ -76,41 +69,9 @@ fun OreHQMobileApp(
             CreatedWalletScreen(
                 createdWalletScreenState = createdWalletScreenViewModel.createdWalletScreenState,
                 onClickContinue = {
-                    navController.navigate("saveWithPasscodeScreen")
-                }
-            )
-        }
-        composable("saveWithPasscodeScreen") {
-            SaveWithPasscodeScreen(
-                saveWithPasscodeScreenState = saveWithPasscodeScreenViewModel.saveWithPasscodeScreenState,
-                onNumberPress = { index, value ->
-                    saveWithPasscodeScreenViewModel.setPasscodeValue(index, value)
-                },
-                setCurrentIndex = { index ->
-                    saveWithPasscodeScreenViewModel.setSelectedIndex(index)
-                },
-                deletePasscodeValue = { index ->
-                    saveWithPasscodeScreenViewModel.deletePasscodeValue(index)
-                },
-                onFinished = { passcode ->
-                    saveWithPasscodeScreenViewModel.finish(passcode, navController, homeScreenViewModel, createdWalletScreenViewModel)
-                }
-            )
-        }
-        composable("unlockScreen") {
-            UnlockScreen(
-                unlockScreenState = unlockScreenViewModel.unlockScreenState,
-                onNumberPress = { index, value ->
-                    unlockScreenViewModel.setPasscodeValue(index, value, navController, homeScreenViewModel)
-                },
-                setCurrentIndex = { index ->
-                    unlockScreenViewModel.setSelectedIndex(index)
-                },
-                deletePasscodeValue = { index ->
-                    unlockScreenViewModel.deletePasscodeValue(index)
-                },
-                onFinished = { passcode ->
-                    unlockScreenViewModel.finish(passcode, navController, homeScreenViewModel)
+                    createdWalletScreenViewModel.saveWallet()
+                    homeScreenViewModel.fetchUiState()
+                    navController.navigate("homeScreen")
                 }
             )
         }

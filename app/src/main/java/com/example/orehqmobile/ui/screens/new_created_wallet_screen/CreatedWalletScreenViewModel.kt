@@ -52,10 +52,8 @@ class CreatedWalletScreenViewModel(
         )
     }
 
-    fun saveWallet(passcode: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            keypairRepository.saveEncryptedKeypair(keypair!!, passcode)
-        }
+    fun saveWallet() {
+        keypairRepository.saveKeypair(keypair!!)
     }
 
 

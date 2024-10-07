@@ -48,8 +48,6 @@ class MainActivity : ComponentActivity() {
 
             val binder = service as OreHQMobileForegroundService.LocalBinder
             oreHQMobileService = binder.getService()
-            binder.setSignCallback(homeScreenViewModel.getSignFunction())
-            binder.getPubkeyCallback(homeScreenViewModel.getPubkeyFunction())
             serviceBoundState = true
 
             onServiceConnected()

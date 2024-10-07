@@ -3,18 +3,21 @@ package com.example.orehqmobile.service
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.location.Location
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ServiceCompat
-import androidx.lifecycle.viewModelScope
+import com.example.orehqmobile.data.database.AppRoomDatabase
+import com.example.orehqmobile.data.entities.SubmissionResult
 import com.example.orehqmobile.data.models.ServerMessage
 import com.example.orehqmobile.data.models.toLittleEndianByteArray
+import com.example.orehqmobile.data.repositories.IKeypairRepository
 import com.example.orehqmobile.data.repositories.IPoolRepository
+import com.example.orehqmobile.data.repositories.KeypairRepository
 import com.example.orehqmobile.data.repositories.PoolRepository
+import com.example.orehqmobile.data.repositories.SubmissionResultRepository
 import com.example.orehqmobile.notification.NotificationsHelper
 import com.funkatronics.encoders.Base58
 import com.funkatronics.encoders.Base64
@@ -28,25 +31,25 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.bouncycastle.crypto.AsymmetricCipherKeyPair
-import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import uniffi.orehqmobileffi.DxSolution
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
+import kotlin.math.pow
 
 /**
  * Simple foreground service that shows a notification to the user.
  */
 class OreHQMobileForegroundService : Service() {
-    private var signCallback: ((ByteArray) -> ByteArray)? = null
-    private var pubkeyCallback: (() -> String)? = null
     private val binder = LocalBinder()
 
     private var poolRepository: IPoolRepository = PoolRepository()
+    private var keypairRepository: IKeypairRepository = KeypairRepository(this)
+
+    private val appDb = AppRoomDatabase.getInstance(this)
+    private val submissionResultDao = appDb.submissionResultDao()
+    private var submissionResultRepository = SubmissionResultRepository(submissionResultDao)
+
     private val runtimeAvailableThreads = Runtime.getRuntime().availableProcessors()
 
     private val coroutineScope = CoroutineScope(Job())
@@ -63,6 +66,7 @@ class OreHQMobileForegroundService : Service() {
     private val _lastDifficulty = MutableStateFlow<UInt>(0u)
     var lastDifficulty: StateFlow<UInt> = _lastDifficulty
 
+    private var keepMining = true
     private var isWebsocketConnected = false
     private var pubkey: String? = null
 
@@ -70,12 +74,6 @@ class OreHQMobileForegroundService : Service() {
 
     inner class LocalBinder : Binder() {
         fun getService(): OreHQMobileForegroundService = this@OreHQMobileForegroundService
-        fun setSignCallback(callback: (ByteArray) -> ByteArray) {
-            signCallback = callback
-        }
-        fun getPubkeyCallback(callback: () -> String) {
-            pubkeyCallback = callback
-        }
     }
 
     override fun onBind(intent: Intent?): IBinder {
@@ -168,7 +166,7 @@ class OreHQMobileForegroundService : Service() {
 
                 var bestDifficulty = 0u
 
-                while(true) {
+                while(keepMining) {
                     val startTime = System.nanoTime()
                     Log.d(TAG, "Seconds of run time: $secondsOfRuntime")
                     val maxBatchRuntime = 10uL // 10 seconds
@@ -219,101 +217,108 @@ class OreHQMobileForegroundService : Service() {
                     }
                 }
 
-                sendReadyMessage()
+                if (keepMining) {
+                    sendReadyMessage()
+                }
 
                 // reset best diff
                 _lastDifficulty.value = _difficulty.value
                 _difficulty.value = 0u
             } catch (e: Exception) {
                 e.printStackTrace()
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@OreHQMobileForegroundService,
-                        "Mining Interval Failed!",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                Toast.makeText(
+                    this@OreHQMobileForegroundService,
+                    "Mining Interval Failed!",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
 
     private fun connectToWebsocket() {
         if (!isWebsocketConnected) {
+            isWebsocketConnected = true
             coroutineScope.launch(Dispatchers.IO) {
-                withContext(Dispatchers.Main) {
-                    isWebsocketConnected = true
-                }
-                val result = poolRepository.fetchTimestamp()
-                result.fold(
-                    onSuccess = { timestamp ->
-                        Log.d(TAG, "Fetched timestamp: $timestamp")
-                        val tsBytes = timestamp.toLittleEndianByteArray()
+                while (coroutineScope.isActive) {
+                    val result = poolRepository.fetchTimestamp()
+                    result.fold(
+                        onSuccess = { timestamp ->
+                            Log.d(TAG, "Fetched timestamp: $timestamp")
+                            val tsBytes = timestamp.toLittleEndianByteArray()
 
-                        val sig = signData(tsBytes)
-                        //val signatureResult = solanaRepository.signMessage(tsBytes, listOf(keypair!!))
+                            val sig = keypairRepository.signMessage(tsBytes)?.signature
+                            if (pubkey == null) {
+                                pubkey = getPubkey()
+                            }
 
-                        if (pubkey == null) {
-                            pubkey = getPubkey()
-                        }
+                            val pk = pubkey
 
-                        val pk = pubkey
-
-                        if (pk != null && sig != null) {
-                            coroutineScope.launch(Dispatchers.IO) {
+                            if (pk != null && sig != null) {
                                 try {
+                                    keepMining = true
+                                    isWebsocketConnected = true
                                     Log.d(TAG, "Connecting to websocket...")
-                                    poolRepository.connectWebSocket(timestamp, Base58.encodeToString(sig), pk, ::sendReadyMessage
+                                    poolRepository.connectWebSocket(
+                                        timestamp,
+                                        Base58.encodeToString(sig),
+                                        pk,
+                                        ::sendReadyMessage
                                     ).collect { serverMessage ->
                                         // Handle incoming WebSocket data
-                                        Log.d(TAG, "Received WebSocket data: $serverMessage")
+                                        Log.d(
+                                            TAG,
+                                            "Received WebSocket data: $serverMessage"
+                                        )
                                         // Process the data as needed
                                         when (serverMessage) {
-                                            is ServerMessage.StartMining -> handleStartMining(serverMessage)
-                                            is ServerMessage.PoolSubmissionResult -> { handlePoolSubmissionResult(serverMessage) }
+                                            is ServerMessage.StartMining -> handleStartMining(
+                                                serverMessage
+                                            )
+
+                                            is ServerMessage.PoolSubmissionResult -> {
+                                                handlePoolSubmissionResult(serverMessage)
+                                            }
                                         }
                                     }
 
-                                    withContext(Dispatchers.Main) {
-                                        isWebsocketConnected = false
-                                    }
+                                    isWebsocketConnected = false
                                 } catch (e: Exception) {
-                                    withContext(Dispatchers.Main) {
-                                        isWebsocketConnected = false
-                                    }
+                                    isWebsocketConnected = false
                                     Log.e(TAG, "WebSocket error: ${e.message}")
                                     when (e) {
                                         is io.ktor.client.plugins.ClientRequestException -> {
                                             val errorBody = e.response.bodyAsText()
                                             Log.e(TAG, "Error body: $errorBody")
                                         }
+
                                         is io.ktor.client.plugins.ServerResponseException -> {
                                             val errorBody = e.response.bodyAsText()
                                             Log.e(TAG, "Error body: $errorBody")
                                         }
+
                                         else -> {
                                             Log.e(TAG, "Unexpected error", e)
                                         }
                                     }
                                 }
 
+                                Log.d(TAG, "Websocket connection closed")
 
-                                withContext(Dispatchers.Main) {
-                                    isWebsocketConnected = false
-                                }
+
+                                isWebsocketConnected = false
+                            } else {
+                                Log.e(TAG, "pk or sig is null")
                             }
-
-                        } else {
-                            Log.e(TAG, "pk or sig is null")
-                        }
-                    },
-                    onFailure = { error ->
-                        withContext(Dispatchers.Main) {
+                        },
+                        onFailure = { error ->
                             isWebsocketConnected = false
+                            Log.e(TAG, "Error fetching timestamp", error)
                         }
-                        Log.e(TAG, "Error fetching timestamp", error)
-                    }
-                )
+                    )
 
+                    Log.d(TAG, "Websocket disconnected. Reconnecting in 3 seconds...")
+                    delay(3000)
+                }
             }
         }
     }
@@ -323,20 +328,22 @@ class OreHQMobileForegroundService : Service() {
             try {
                 val now = System.currentTimeMillis() / 1000 // Current time in seconds
                 val msg = now.toLittleEndianByteArray()
-                val sig = signData(msg)
+                val sig = keypairRepository.signMessage(msg)?.signature
                 val publicKey = Base58.decode(pubkey!!)
 
                 val binData = ByteArray(1 + 32 + 8 + sig!!.size).apply {
                     this[0] = 0 // Ready message type
                     System.arraycopy(publicKey, 0, this, 1, 32)
                     System.arraycopy(msg, 0, this, 33, 8)
-                    System.arraycopy(sig, 0, this, 41, sig!!.size)
+                    System.arraycopy(sig, 0, this, 41, sig.size)
                 }
 
                 poolRepository.sendWebSocketMessage(binData)
                 Log.d(TAG, "Sent Ready message")
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending Ready message", e)
+                keepMining = false
+                poolRepository.disconnectWebsocket()
             }
         }
     }
@@ -344,6 +351,7 @@ class OreHQMobileForegroundService : Service() {
     private fun handlePoolSubmissionResult(poolSubmissionResult: ServerMessage.PoolSubmissionResult) {
         Log.d(TAG, "Received pool submission result:")
         Log.d(TAG, "Difficulty: ${poolSubmissionResult.difficulty}")
+        Log.d(TAG, "Difficulty Int: ${poolSubmissionResult.difficulty.toInt()}")
         Log.d(TAG, "Total Balance: ${"%.11f".format(poolSubmissionResult.totalBalance)}")
         Log.d(TAG, "Total Rewards: ${"%.11f".format(poolSubmissionResult.totalRewards)}")
         Log.d(TAG, "Top Stake: ${"%.11f".format(poolSubmissionResult.topStake)}")
@@ -354,6 +362,20 @@ class OreHQMobileForegroundService : Service() {
         Log.d(TAG, "Miner Supplied Difficulty: ${poolSubmissionResult.minerSuppliedDifficulty}")
         Log.d(TAG, "Miner Earned Rewards: ${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}")
         Log.d(TAG, "Miner Percentage: ${"%.11f".format(poolSubmissionResult.minerPercentage)}")
+
+
+        val totalRewards = (poolSubmissionResult.totalRewards * 10.0.pow(11.0)).toLong()
+        val earnings = (poolSubmissionResult.minerEarnedRewards * 10.0.pow(11.0)).toLong()
+
+        submissionResultRepository.insertSubmissionResult(SubmissionResult(
+            poolSubmissionResult.difficulty.toInt(),
+            totalRewards,
+            poolSubmissionResult.minerPercentage,
+            poolSubmissionResult.minerSuppliedDifficulty.toInt(),
+            earnings,
+        ))
+
+        //Toast.makeText(this@OreHQMobileForegroundService, "${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}", Toast.LENGTH_LONG)
     }
 
     private fun sendSubmissionMessage(submission: DxSolution) {
@@ -366,7 +388,7 @@ class OreHQMobileForegroundService : Service() {
                 bestHashBin.copyInto(hashNonceMessage, 0, 0, 16)
                 bestNonceBin.copyInto(hashNonceMessage, 16, 0, 8)
 
-                val sig = signData(hashNonceMessage.toByteArray())
+                val sig = keypairRepository.signMessage(hashNonceMessage.toByteArray())?.signature
                 val publicKey = Base58.decode(pubkey!!)
 
                 // Convert signature to Base58 string
@@ -384,16 +406,14 @@ class OreHQMobileForegroundService : Service() {
                 Log.d(TAG, "Sent BestSolution message")
             } catch (e: Exception) {
                 Log.e(TAG, "Error sending BestSolution message", e)
+                keepMining = false
+                poolRepository.disconnectWebsocket()
             }
         }
     }
 
-    private fun signData(data: ByteArray): ByteArray? {
-        return signCallback?.invoke(data)
-    }
-
     private fun getPubkey(): String? {
-        return pubkeyCallback?.invoke()
+        return keypairRepository.getPubkey()?.toString()
     }
 
     companion object {

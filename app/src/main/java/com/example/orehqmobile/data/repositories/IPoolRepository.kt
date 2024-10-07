@@ -6,7 +6,6 @@ import com.funkatronics.encoders.Base64
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
-import io.ktor.client.plugins.websocket.ws
 import io.ktor.client.plugins.websocket.wss
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -16,14 +15,14 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpMethod
 import io.ktor.utils.io.errors.IOException
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
+import io.ktor.websocket.close
 import io.ktor.websocket.readBytes
 import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import java.util.UUID
 
 interface IPoolRepository {
     suspend fun connectWebSocket(
@@ -33,6 +32,7 @@ interface IPoolRepository {
         onConnectionCallback: (() -> Unit)?,
     ): Flow<ServerMessage>
 
+    suspend fun disconnectWebsocket()
     suspend fun fetchTimestamp(): Result<ULong>
     suspend fun sendWebSocketMessage(message: ByteArray)
     suspend fun fetchMinerBalance(publicKey: String): Result<Double>
@@ -44,7 +44,7 @@ interface IPoolRepository {
     suspend fun fetchLatestBlockhash(): Result<String>
     suspend fun fetchSolBalance(publicKey: String): Result<Double>
     suspend fun fetchSignupFee(): Result<Double>
-    suspend fun signup(publicKey: String, signedTx: String): Result<String>
+    suspend fun signup(minerPubkey: String, feePayerPubkey: String, signedTx: String): Result<String>
     suspend fun claim(
         timestamp: ULong,
         signature: String,
@@ -93,6 +93,10 @@ class PoolRepository : IPoolRepository {
                 }
             }
         }
+    }
+
+    override suspend fun disconnectWebsocket() {
+        webSocketSession?.close(CloseReason(CloseReason.Codes.SERVICE_RESTART, "Reconnecting"))
     }
 
     override suspend fun fetchTimestamp(): Result<ULong> {
@@ -234,16 +238,16 @@ class PoolRepository : IPoolRepository {
         }
     }
 
-    override suspend fun signup(publicKey: String, signedTx: String): Result<String> {
+    override suspend fun signup(minerPubkey: String, feePayerPubkey: String, signedTx: String): Result<String> {
         return try {
-            Log.d("PoolRepository", "Signup with pubkey: $publicKey")
-            val response: HttpResponse = client.post("https://$HOST_URL/signup?pubkey=$publicKey") {
+            Log.d("PoolRepository", "Signup with pubkey: $minerPubkey")
+            val response: HttpResponse = client.post("https://$HOST_URL/v2/signup?miner=$minerPubkey&fee_payer=$feePayerPubkey") {
                 setBody(signedTx)
             }
             if (response.status.value in 200..299) {
                 Result.success(response.bodyAsText())
             } else {
-                Result.failure(IOException("HTTP error ${response.status.value}"))
+                Result.failure(IOException("HTTP error ${response.status.value}: ${response.bodyAsText()}"))
             }
         } catch (e: Exception) {
             Result.failure(e)
