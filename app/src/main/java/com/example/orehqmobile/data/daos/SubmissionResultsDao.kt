@@ -10,6 +10,6 @@ interface SubmissionResultDao {
     @Insert
     fun insertSubmissionResult(sr: SubmissionResult)
 
-    @Query("SELECT * FROM submission_results")
+    @Query("SELECT * FROM submission_results ORDER BY id DESC")
     fun getAllSubmissionResults(): List<SubmissionResult>
 }
