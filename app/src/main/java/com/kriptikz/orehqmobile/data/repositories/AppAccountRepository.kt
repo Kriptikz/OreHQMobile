@@ -22,10 +22,4 @@ class AppAccountRepository(private val appAccountDao: AppAccountDao) {
     fun updateAppAccount(newAppAccountData: AppAccount): Int {
         return appAccountDao.updateAppAccount(newAppAccountData)
     }
-
-    fun updateIsMining(newIsMining: Boolean, id: Int) {
-        coroutineScope.launch(Dispatchers.IO) {
-            appAccountDao.updateIsMining(newIsMining, id)
-        }
-    }
 }

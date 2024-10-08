@@ -17,7 +17,4 @@ interface AppAccountDao {
 
     @Update
     fun updateAppAccount(newAppAccountData: AppAccount): Int
-
-    @Query("UPDATE app_accounts SET isMining = :isMining WHERE id = :id")
-    fun updateIsMining(isMining: Boolean, id: Int): Int
 }

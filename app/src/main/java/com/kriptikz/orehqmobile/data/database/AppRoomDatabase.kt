@@ -13,9 +13,8 @@ import com.kriptikz.orehqmobile.data.entities.SubmissionResult
 import com.kriptikz.orehqmobile.data.entities.Wallet
 
 @Database(
-    version = 2,
+    version = 1,
     entities = [(Wallet::class), (SubmissionResult::class), (AppAccount::class)],
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
     exportSchema = true
 )
 abstract class AppRoomDatabase: RoomDatabase() {
