@@ -249,6 +249,9 @@ class HomeScreenViewModel(
                         val balanceRewardsResult = poolRepository.fetchMinerRewards(pubkey)
                         balanceRewardsResult.fold(
                             onSuccess = { balance ->
+                                if (appAccountRepository.getAppAccount() == null) {
+                                    appAccountRepository.insertAppAccount(AppAccount(pubkey, true))
+                                }
                                 homeUiState = homeUiState.copy(
                                     claimableBalance = balance,
                                     isSignedUp = true,
