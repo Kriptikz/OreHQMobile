@@ -62,9 +62,6 @@ class OreHQMobileForegroundService : Service() {
     private val _difficulty = MutableStateFlow<UInt>(0u)
     var difficulty: StateFlow<UInt> = _difficulty
 
-    private val _lastDifficulty = MutableStateFlow<UInt>(0u)
-    var lastDifficulty: StateFlow<UInt> = _lastDifficulty
-
     private val _poolBalance = MutableStateFlow<Double>(0.0)
     var poolBalance: StateFlow<Double> = _poolBalance
 
@@ -158,6 +155,7 @@ class OreHQMobileForegroundService : Service() {
                 else -> runtimeAvailableThreads
             }
             _threadCount.value = newThreadsCount
+            NotificationsHelper.updateNotification(this@OreHQMobileForegroundService, NOTIFICATION_ID, _threadCount.value, _hashpower.value, _difficulty.value)
         }
     }
 
@@ -229,17 +227,13 @@ class OreHQMobileForegroundService : Service() {
                 if (keepMining) {
                     sendReadyMessage()
                 }
-
-                // reset best diff
-                _lastDifficulty.value = _difficulty.value
-                _difficulty.value = 0u
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(
-                    this@OreHQMobileForegroundService,
-                    "Mining Interval Failed!",
-                    Toast.LENGTH_SHORT
-                ).show()
+//                Toast.makeText(
+//                    this@OreHQMobileForegroundService,
+//                    "Mining Interval Failed!",
+//                    Toast.LENGTH_SHORT
+//                ).show()
             }
         }
     }

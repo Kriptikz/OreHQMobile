@@ -60,7 +60,8 @@ fun HomeScreen(
     threadCount: Int,
     hashpower: UInt,
     difficulty: UInt,
-    lastDifficulty: UInt,
+    powerSlider: Float,
+    setPowerSlider: (Float) -> Unit,
     onToggleMining: () -> Unit,
     onClickSignup: () -> Unit,
     onClickConnectWallet: () -> Unit,
@@ -87,10 +88,11 @@ fun HomeScreen(
                         threadCount = threadCount,
                         hashpower = hashpower,
                         difficulty = difficulty,
-                        lastDifficulty = lastDifficulty,
-                        onToggleMining,
-                        onClickClaim,
-                        onUpdateSelectedThreads,
+                        powerSlider = powerSlider,
+                        setPowerSlider = setPowerSlider,
+                        onToggleMining = onToggleMining,
+                        onClickClaim = onClickClaim,
+                        onUpdateSelectedThreads = onUpdateSelectedThreads,
                     )
                 } else {
                     SignUpScreen(
@@ -115,7 +117,6 @@ fun HomeScreenPreview() {
                 availableThreads = 1,
                 hashRate = 0u,
                 difficulty = 0u,
-                lastDifficulty = 0u,
                 selectedThreads =  1,
                 claimableBalance = 0.0,
                 solBalance = 0.0,
@@ -135,7 +136,8 @@ fun HomeScreenPreview() {
             threadCount = 1,
             hashpower = 0u,
             difficulty = 0u,
-            lastDifficulty = 0u,
+            powerSlider = 0f,
+            setPowerSlider = {},
             onToggleMining = {},
             onClickSignup = {},
             onClickConnectWallet = {},
@@ -152,14 +154,14 @@ fun MiningScreen(
     serviceRunning: Boolean,
     threadCount: Int,
     hashpower: UInt,
+    powerSlider: Float,
     difficulty: UInt,
-    lastDifficulty: UInt,
+    setPowerSlider: (Float) -> Unit,
     onToggleMining: () -> Unit,
     onClickClaim: () -> Unit,
     onUpdateSelectedThreads: (Int) -> Unit,
 ) {
     val difficulty = difficulty
-    val lastDifficulty = lastDifficulty
     val availableThreads = homeUiState.availableThreads
     val claimableBalance = homeUiState.claimableBalance
     val activeMiners = homeUiState.activeMiners
@@ -211,10 +213,6 @@ fun MiningScreen(
             )
 
             Text(text = "Hashpower: $hashpower", modifier = Modifier.padding(bottom = 8.dp))
-            Text(
-                text = "Last Difficulty: $lastDifficulty",
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
             Text(text = "Difficulty: $difficulty", modifier = Modifier.padding(bottom = 16.dp))
 
             // Thread count selector
@@ -227,25 +225,23 @@ fun MiningScreen(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 
-                val steps = listOf("Min", "Low", "Med", "High", "Max")
-                val sliderPosition = remember { mutableStateOf((threadCount.toFloat() - 1) / (availableThreads - 1)) }
-                
                 Slider(
-                    value = sliderPosition.value,
+                    value = powerSlider,
                     enabled = serviceRunning,
                     onValueChange = { newValue ->
-                        sliderPosition.value = newValue
+                        setPowerSlider(newValue)
                         val newThreadCount = newValue.roundToInt()
                         onUpdateSelectedThreads(newThreadCount)
                     },
                     steps = 3,
                     valueRange = 0f..4f,
                     colors = SliderDefaults.colors(
-                        thumbColor = lerp(Color.Green, Color.Red, sliderPosition.value / 4f),
-                        activeTrackColor = lerp(Color.Green, Color.Red, sliderPosition.value / 4f)
+                        thumbColor = lerp(Color.Green, Color.Red, powerSlider / 4f),
+                        activeTrackColor = lerp(Color.Green, Color.Red, powerSlider / 4f)
                     )
                 )
-                
+
+                val steps = listOf("Min", "Low", "Med", "High", "Max")
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween

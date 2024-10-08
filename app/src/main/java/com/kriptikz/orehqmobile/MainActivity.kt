@@ -37,10 +37,10 @@ class MainActivity : ComponentActivity() {
 
     private var serviceBoundState by mutableStateOf(false)
 
+    private var powerSlider by mutableStateOf(0f)
     private var threadCount by mutableStateOf<Int>(1)
     private var hashpower by mutableStateOf<UInt>(0u)
     private var difficulty by mutableStateOf<UInt>(0u)
-    private var lastDifficulty by mutableStateOf<UInt>(0u)
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
 
             val binder = service as OreHQMobileForegroundService.LocalBinder
             oreHQMobileService = binder.getService()
+            oreHQMobileService?.updateSelectedThreads(powerSlider.toInt())
             serviceBoundState = true
 
             onServiceConnected()
@@ -91,7 +92,8 @@ class MainActivity : ComponentActivity() {
                     threadCount = threadCount,
                     hashpower = hashpower,
                     difficulty = difficulty,
-                    lastDifficulty =  lastDifficulty,
+                    powerSlider = powerSlider,
+                    setPowerSlider = ::onSetPowerSlider,
                     oreHQMobileService,
                     onClickService = ::onStartOrStopForegroundServiceClick,
                     serviceRunning = serviceBoundState,
@@ -107,6 +109,10 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         unbindService(connection)
+    }
+
+    private fun onSetPowerSlider(newValue: Float) {
+        powerSlider = newValue
     }
 
     /**
@@ -171,28 +177,31 @@ class MainActivity : ComponentActivity() {
             }
         }
         lifecycleScope.launch {
-            oreHQMobileService?.lastDifficulty?.collectLatest { it ->
-                lastDifficulty = it
-            }
-        }
-        lifecycleScope.launch {
             oreHQMobileService?.poolBalance?.collectLatest { it ->
-                homeScreenViewModel.setPoolbalance(it)
+                if (it > 0) {
+                    homeScreenViewModel.setPoolbalance(it)
+                }
             }
         }
         lifecycleScope.launch {
             oreHQMobileService?.topStake?.collectLatest { it ->
-                homeScreenViewModel.setTopStake(it)
+                if (it > 0) {
+                    homeScreenViewModel.setTopStake(it)
+                }
             }
         }
         lifecycleScope.launch {
             oreHQMobileService?.poolMultiplier?.collectLatest { it ->
-                homeScreenViewModel.setPoolMultiplier(it)
+                if (it > 0) {
+                    homeScreenViewModel.setPoolMultiplier(it)
+                }
             }
         }
         lifecycleScope.launch {
             oreHQMobileService?.activeMiners?.collectLatest { it ->
-                homeScreenViewModel.setActiveMiners(it.toInt())
+                if (it > 0u) {
+                    homeScreenViewModel.setActiveMiners(it.toInt())
+                }
             }
         }
     }
