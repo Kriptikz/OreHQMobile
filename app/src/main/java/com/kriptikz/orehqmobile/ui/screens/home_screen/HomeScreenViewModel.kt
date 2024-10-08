@@ -57,7 +57,7 @@ data class HomeUiState(
     var isLoadingUi: Boolean,
     var secureWalletPubkey: String?,
     var minerPubkey: String?,
-    var submissionResults: List<SubmissionResult>,
+    var submissionResults: List<SubmissionResult>
 )
 
 @OptIn(ExperimentalStdlibApi::class)
@@ -90,7 +90,7 @@ class HomeScreenViewModel(
             isLoadingUi = true,
             secureWalletPubkey = null,
             minerPubkey = null,
-            submissionResults = emptyList(),
+            submissionResults = emptyList()
         )
     )
         private set
@@ -125,7 +125,7 @@ class HomeScreenViewModel(
             if (appAccount != null) {
                 homeUiState = homeUiState.copy(
                     isSignedUp = appAccount.isSignedUp,
-                    isLoadingUi = false,
+                    isLoadingUi = false
                 )
             }
 
@@ -338,7 +338,7 @@ class HomeScreenViewModel(
                 signedUp.fold(
                     onSuccess = {
                         Log.d("HomeScreenViewModel", "Successfully signed up!")
-                        appAccountRepository.insertAppAccount(AppAccount(publicKey, true, false, 0))
+                        appAccountRepository.insertAppAccount(AppAccount(publicKey, true))
                         withContext(Dispatchers.Main) {
                             homeUiState = homeUiState.copy(
                                 isSignedUp = true

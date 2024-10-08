@@ -135,7 +135,7 @@ class OreHQMobileForegroundService : Service() {
             }
         )
 
-        //connectToWebsocket()
+        connectToWebsocket()
     }
 
     /**
