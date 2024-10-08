@@ -3,7 +3,6 @@ package com.kriptikz.orehqmobile
 import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
@@ -19,17 +18,27 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.work.BackoffPolicy
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.Operation
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.kriptikz.orehqmobile.data.repositories.KeypairRepository
 import com.kriptikz.orehqmobile.service.OreHQMobileForegroundService
 import com.kriptikz.orehqmobile.ui.OreHQMobileApp
 import com.kriptikz.orehqmobile.ui.screens.home_screen.HomeScreenViewModel
 import com.kriptikz.orehqmobile.ui.theme.OreHQMobileTheme
+import com.kriptikz.orehqmobile.worker.MiningWorker
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
-import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
-import com.solana.mobilewalletadapter.clientlib.MobileWalletAdapter
-import com.solana.mobilewalletadapter.clientlib.Solana
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.time.Duration
+import java.util.concurrent.ExecutionException
+
 
 class MainActivity : ComponentActivity() {
     private lateinit var homeScreenViewModel: HomeScreenViewModel
@@ -41,6 +50,8 @@ class MainActivity : ComponentActivity() {
     private var threadCount by mutableStateOf<Int>(1)
     private var hashpower by mutableStateOf<UInt>(0u)
     private var difficulty by mutableStateOf<UInt>(0u)
+
+    private val workManager = WorkManager.getInstance(application)
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
@@ -80,6 +91,26 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         enableEdgeToEdge()
+
+        val workInfoStatuses = workManager.getWorkInfosByTag("MiningWorker")
+
+        try {
+            val workInfoList: List<WorkInfo> = workInfoStatuses.get()
+            for (workInfo in workInfoList) {
+                val state: WorkInfo.State = workInfo.state
+                if ((state == WorkInfo.State.RUNNING) or (state == WorkInfo.State.ENQUEUED)) {
+                    serviceBoundState = true
+                }
+            }
+        } catch (e: ExecutionException) {
+            e.printStackTrace()
+            serviceBoundState = false
+        } catch (e: InterruptedException) {
+            e.printStackTrace()
+            serviceBoundState = false
+        }
+
+
 
         val keypairRepository = KeypairRepository(this);
 
@@ -138,11 +169,34 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onStartOrStopForegroundServiceClick() {
-        if (oreHQMobileService == null) {
-            startForegroundService()
-        } else {
+        if (serviceBoundState) {
+            workManager.cancelAllWorkByTag("MiningWorker")
             // service is already running, stop it
             oreHQMobileService?.stopForegroundService()
+            serviceBoundState = false
+        } else {
+//            val miningRequest = PeriodicWorkRequestBuilder<MiningWorker>(Duration.ofMinutes(10))
+//                .addTag("MiningWorker")
+//                .build()
+//
+//            workManager.enqueueUniquePeriodicWork(
+//                "MiningWorker",
+//                ExistingPeriodicWorkPolicy.KEEP,
+//                miningRequest
+//            )
+            startForegroundService()
+            val miningRequest = OneTimeWorkRequestBuilder<MiningWorker>()
+                .addTag("MiningWorker")
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .build()
+
+            workManager.beginUniqueWork(
+                "MiningWorker",
+                ExistingWorkPolicy.KEEP,
+                miningRequest
+            ).enqueue()
+
+            serviceBoundState = true
         }
     }
 
