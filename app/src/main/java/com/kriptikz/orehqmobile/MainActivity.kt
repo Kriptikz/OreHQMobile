@@ -48,7 +48,12 @@ class MainActivity : ComponentActivity() {
 
             val binder = service as OreHQMobileForegroundService.LocalBinder
             oreHQMobileService = binder.getService()
-            oreHQMobileService?.updateSelectedThreads(powerSlider.toInt())
+
+            if (powerSlider > 0f) {
+                oreHQMobileService?.updateSelectedThreads(powerSlider.toInt())
+            } else {
+                powerSlider = oreHQMobileService?.powerSlider ?: 0f
+            }
             serviceBoundState = true
 
             onServiceConnected()

@@ -78,6 +78,8 @@ class OreHQMobileForegroundService : Service() {
     private var isWebsocketConnected = false
     private var pubkey: String? = null
 
+    var powerSlider: Float = 0f
+
     private val NOTIFICATION_ID = 1
 
     inner class LocalBinder : Binder() {
@@ -147,12 +149,30 @@ class OreHQMobileForegroundService : Service() {
     fun updateSelectedThreads(count: Int) {
         _threadCount.value.let {
             val newThreadsCount = when (count) {
-                0 -> 1
-                1 -> runtimeAvailableThreads / 3
-                2 -> runtimeAvailableThreads / 2
-                3 -> runtimeAvailableThreads - (runtimeAvailableThreads / 3)
-                4 -> runtimeAvailableThreads
-                else -> runtimeAvailableThreads
+                0 -> {
+                    powerSlider = 0f
+                    1
+                }
+                1 -> {
+                    powerSlider = 1f
+                    runtimeAvailableThreads / 3
+                }
+                2 -> {
+                    powerSlider = 2f
+                    runtimeAvailableThreads / 2
+                }
+                3 -> {
+                    powerSlider = 3f
+                    runtimeAvailableThreads - (runtimeAvailableThreads / 3)
+                }
+                4 -> {
+                    powerSlider = 4f
+                    runtimeAvailableThreads
+                }
+                else -> {
+                    powerSlider = 4f
+                    runtimeAvailableThreads
+                }
             }
             _threadCount.value = newThreadsCount
             NotificationsHelper.updateNotification(this@OreHQMobileForegroundService, NOTIFICATION_ID, _threadCount.value, _hashpower.value, _difficulty.value)

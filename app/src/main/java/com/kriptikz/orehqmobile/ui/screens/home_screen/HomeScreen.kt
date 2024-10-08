@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -45,6 +46,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.ui.text.TextStyle
+import com.kriptikz.orehqmobile.data.daos.SubmissionResultDao
 import com.kriptikz.orehqmobile.data.entities.SubmissionResult
 import com.kriptikz.orehqmobile.ui.screens.OreHQMobileScaffold
 import com.kriptikz.orehqmobile.ui.theme.OreHQMobileTheme
@@ -111,7 +114,7 @@ fun HomeScreen(
 @Preview(showBackground = true)
 @Composable
 fun HomeScreenPreview() {
-    OreHQMobileTheme {
+    OreHQMobileTheme(darkTheme = true) {
         HomeScreen(
             HomeUiState(
                 availableThreads = 1,
@@ -125,18 +128,18 @@ fun HomeScreenPreview() {
                 poolBalance = 0.0,
                 topStake = 0.0,
                 poolMultiplier = 0.0,
-                isSignedUp = false,
+                isSignedUp = true,
                 isProcessingSignup = false,
                 isLoadingUi = false,
-                secureWalletPubkey = null,
-                minerPubkey = null,
+                secureWalletPubkey = "",
+                minerPubkey = "",
                 submissionResults = emptyList()
             ),
             serviceRunning = false,
             threadCount = 1,
             hashpower = 0u,
             difficulty = 0u,
-            powerSlider = 0f,
+            powerSlider = 4f,
             setPowerSlider = {},
             onToggleMining = {},
             onClickSignup = {},
@@ -213,18 +216,43 @@ fun MiningScreen(
             )
 
             Text(text = "Hashpower: $hashpower", modifier = Modifier.padding(bottom = 8.dp))
-            Text(text = "Difficulty: $difficulty", modifier = Modifier.padding(bottom = 16.dp))
+            Text(text = "Difficulty: $difficulty")
 
             // Thread count selector
             Column(
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
-                Text(
-                    text = "Mining Power:",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                
+                Row(
+                    Modifier.height(36.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Mining Power:",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    if (powerSlider >= 3) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Warning, high power usage!",
+                                tint = Color.Yellow
+                            )
+                            Box(
+                                Modifier.height(60.dp).padding(start = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Warning: High power usage can degrade device!",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (powerSlider == 3f) Color.Yellow else Color.Red,
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Slider(
                     value = powerSlider,
                     enabled = serviceRunning,
@@ -284,7 +312,7 @@ fun MiningScreen(
             val minimumBalanceReached = claimableBalance >= 0.005
 
             if (!minimumBalanceReached) {
-                Text("Minimum claim amount is 0.005")
+                Text("Minimum claim amount is 0.005", style = MaterialTheme.typography.labelSmall)
             }
             Button(
                 onClick = onClickClaim,
@@ -302,7 +330,7 @@ fun MiningScreen(
             ) {
                 Text(text = "Earned")
                 Text(text = "Diff")
-                Text(text = "Timestamp")
+                Text(text = "Date")
             }
             LazyColumn(
                 modifier = Modifier
@@ -325,17 +353,18 @@ fun SubmissionResultItem(result: SubmissionResult) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(8.dp),
-        horizontalArrangement = Arrangement.SpaceAround
+        horizontalArrangement = Arrangement.SpaceAround,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         val earnings = (result.minerEarned.toDouble() / 10.0.pow(11.0))
         val calendar = Calendar.getInstance(Locale.getDefault())
         //get current date from ts
         calendar.timeInMillis = result.createdAt
         //return formatted date
-        val date = android.text.format.DateFormat.format("E, dd MMM HH:mm:ss", calendar).toString()
-        Text(text = "${"%.11f".format(earnings)}")
-        Text(text = "${result.minerDifficulty}")
-        Text(text = "$date")
+        val date = android.text.format.DateFormat.format("dd-MM-yy-HH:mm:ss", calendar).toString()
+        Text(text = "${"%.11f".format(earnings)}", style = MaterialTheme.typography.bodyLarge)
+        Text(text = "${result.minerDifficulty}", style = MaterialTheme.typography.bodyLarge)
+        Text(text = "$date", style = MaterialTheme.typography.bodySmall)
     }
 }
 

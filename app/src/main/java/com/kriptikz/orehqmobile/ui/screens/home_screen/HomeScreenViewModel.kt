@@ -165,18 +165,14 @@ class HomeScreenViewModel(
             if (secureWallet.isNotEmpty()) {
                 Log.d(TAG, "Found connected wallet db data.")
                 walletAdapter.authToken = secureWallet[0].authToken
-                withContext(Dispatchers.Main) {
-                    homeUiState = homeUiState.copy(
-                        secureWalletPubkey = secureWallet[0].publicKey
-                    )
-                }
+                homeUiState = homeUiState.copy(
+                    secureWalletPubkey = secureWallet[0].publicKey
+                )
             } else {
                 Log.d(TAG, "No connected wallet data in db.")
-                withContext(Dispatchers.Main) {
-                    homeUiState = homeUiState.copy(
-                        isLoadingUi = false
-                    )
-                }
+                homeUiState = homeUiState.copy(
+                    isLoadingUi = false
+                )
             }
         }
     }
@@ -203,6 +199,17 @@ class HomeScreenViewModel(
             homeUiState = homeUiState.copy(
                 minerPubkey = keypairRepository.getPubkey()?.toString()
             )
+        }
+        if (homeUiState.secureWalletPubkey == null) {
+            val secureWallet = walletRepository.getAllWallets()
+            if (secureWallet.isNotEmpty()) {
+                walletAdapter.authToken = secureWallet[0].authToken
+                homeUiState = homeUiState.copy(
+                    secureWalletPubkey = secureWallet[0].publicKey
+                )
+            } else {
+                Log.d(TAG, "No connected wallet data in db.")
+            }
         }
         val pubkey = homeUiState.minerPubkey
         if (pubkey != null) {
@@ -248,7 +255,6 @@ class HomeScreenViewModel(
                                 )
                             },
                             onFailure = { error ->
-                                homeUiState = homeUiState.copy(isSignedUp = false)
                                 Log.e("HomeScreenViewModel", "Error fetching wallet rewards balance", error)
                             }
                         )
