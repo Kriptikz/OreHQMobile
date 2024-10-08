@@ -56,6 +56,9 @@ room {
 }
 
 dependencies {
+    val work_version = "2.9.1"
+
+    implementation("androidx.work:work-runtime-ktx:$work_version")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
