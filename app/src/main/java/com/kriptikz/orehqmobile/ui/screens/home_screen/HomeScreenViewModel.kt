@@ -318,6 +318,9 @@ class HomeScreenViewModel(
                                 val appAccount = appAccountRepository.getAppAccount()
                                 if (appAccount == null) {
                                     appAccountRepository.insertAppAccount(AppAccount(pubkey, true, false, 0, 0, 0, false))
+                                    val appAccount = appAccountRepository.getAppAccount()
+                                    appAccountId = appAccount!!.id
+
                                 }
                             },
                             onFailure = { error ->
@@ -405,6 +408,10 @@ class HomeScreenViewModel(
                     onSuccess = {
                         Log.d("HomeScreenViewModel", "Successfully signed up!")
                         appAccountRepository.insertAppAccount(AppAccount(publicKey, true, false, 0, 0, 0, false))
+
+                        val appAccount = appAccountRepository.getAppAccount()
+                        appAccountId = appAccount!!.id
+
                         withContext(Dispatchers.Main) {
                             homeUiState = homeUiState.copy(
                                 isSignedUp = true

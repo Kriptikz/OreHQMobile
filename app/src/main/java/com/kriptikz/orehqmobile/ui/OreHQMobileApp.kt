@@ -6,7 +6,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.kriptikz.orehqmobile.service.OreHQMobileForegroundService
 import com.kriptikz.orehqmobile.ui.screens.home_screen.HomeScreen
 import com.kriptikz.orehqmobile.ui.screens.home_screen.HomeScreenViewModel
 import com.kriptikz.orehqmobile.ui.screens.new_created_wallet_screen.CreatedWalletScreen

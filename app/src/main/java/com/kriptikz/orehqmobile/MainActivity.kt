@@ -27,6 +27,8 @@ import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.kriptikz.orehqmobile.data.database.AppRoomDatabase
+import com.kriptikz.orehqmobile.data.repositories.AppAccountRepository
 import com.kriptikz.orehqmobile.data.repositories.KeypairRepository
 import com.kriptikz.orehqmobile.service.OreHQMobileForegroundService
 import com.kriptikz.orehqmobile.ui.OreHQMobileApp
@@ -34,6 +36,8 @@ import com.kriptikz.orehqmobile.ui.screens.home_screen.HomeScreenViewModel
 import com.kriptikz.orehqmobile.ui.theme.OreHQMobileTheme
 import com.kriptikz.orehqmobile.worker.MiningWorker
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -126,7 +130,7 @@ class MainActivity : ComponentActivity() {
                     hasEncryptedKeypair,
                     setPowerSlider = ::onSetPowerSlider,
                     onClickService = ::onStartOrStopForegroundServiceClick,
-                    serviceRunning = homeScreenViewModel.homeUiState.isMiningSwitchOn,
+                    serviceRunning = serviceBoundState,
                     homeScreenViewModel
                 )
             }
@@ -173,8 +177,8 @@ class MainActivity : ComponentActivity() {
             oreHQMobileService?.stopForegroundService()
             serviceBoundState = false
         } else {
+            serviceBoundState = true
             homeScreenViewModel.setIsMiningSwitchOn(true)
-            startForegroundService()
             val miningRequest = OneTimeWorkRequestBuilder<MiningWorker>()
                 .addTag("MiningWorker")
                 .setBackoffCriteria(BackoffPolicy.LINEAR, Duration.ofMillis(5000))
@@ -186,7 +190,7 @@ class MainActivity : ComponentActivity() {
                 miningRequest
             ).enqueue()
 
-            serviceBoundState = true
+            startForegroundService()
         }
     }
 

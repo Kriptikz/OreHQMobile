@@ -41,6 +41,6 @@ class AppAccount {
         this.isMiningSwitchOn = isMiningSwitchOn
         this.miningPowerLevel = miningPowerLevel
         this.hashPower = hashPower
-        this.lastDifficulty = hashPower
+        this.lastDifficulty = lastDifficulty
     }
 }

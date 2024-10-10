@@ -3,6 +3,8 @@ package com.kriptikz.orehqmobile.data.repositories
 import android.util.Log
 import com.kriptikz.orehqmobile.data.daos.AppAccountDao
 import com.kriptikz.orehqmobile.data.entities.AppAccount
+import com.kriptikz.orehqmobile.ui.screens.home_screen.HomeScreenViewModel
+import com.kriptikz.orehqmobile.ui.screens.home_screen.HomeScreenViewModel.Companion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -24,10 +26,8 @@ class AppAccountRepository(private val appAccountDao: AppAccountDao) {
         return appAccountDao.getAppAccountAsFlow()
     }
 
-    fun insertAppAccount(newAppAccount: AppAccount) {
-        coroutineScope.launch(Dispatchers.IO) {
-            appAccountDao.insertNewAppAccount(newAppAccount)
-        }
+    suspend fun insertAppAccount(newAppAccount: AppAccount) {
+        appAccountDao.insertNewAppAccount(newAppAccount)
     }
 
     fun updateAppAccount(newAppAccountData: AppAccount): Int {
