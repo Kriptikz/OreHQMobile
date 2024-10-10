@@ -23,6 +23,7 @@ import com.kriptikz.orehqmobile.data.repositories.WalletRepository
 import com.funkatronics.encoders.Base58
 import com.kriptikz.orehqmobile.data.entities.AppAccount
 import com.kriptikz.orehqmobile.data.repositories.AppAccountRepository
+import com.kriptikz.orehqmobile.worker.MiningWorker
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import com.solana.mobilewalletadapter.clientlib.ConnectionIdentity
 import com.solana.mobilewalletadapter.clientlib.MobileWalletAdapter
@@ -32,6 +33,8 @@ import com.solana.mobilewalletadapter.clientlib.successPayload
 import com.solana.transaction.Transaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
@@ -42,8 +45,8 @@ import kotlin.math.pow
 
 data class HomeUiState(
     var availableThreads: Int,
-    var hashRate: UInt,
-    var difficulty: UInt,
+    var hashRate: Int,
+    var difficulty: Int,
     var selectedThreads: Int,
     var solBalance: Double,
     var claimableBalance: Double,
@@ -51,13 +54,15 @@ data class HomeUiState(
     var activeMiners: Int,
     var poolBalance: Double,
     var poolMultiplier: Double,
-    var topStake: Double,
     var isSignedUp: Boolean,
+    var isMiningSwitchOn: Boolean,
     var isProcessingSignup: Boolean,
     var isLoadingUi: Boolean,
     var secureWalletPubkey: String?,
     var minerPubkey: String?,
     var submissionResults: List<SubmissionResult>,
+    var powerSlider: Float,
+    var lastSubmissionAgo: Long
 )
 
 @OptIn(ExperimentalStdlibApi::class)
@@ -75,8 +80,8 @@ class HomeScreenViewModel(
     var homeUiState: HomeUiState by mutableStateOf(
         HomeUiState(
             availableThreads = 1,
-            hashRate = 0u,
-            difficulty = 0u,
+            hashRate = 0,
+            difficulty = 0,
             selectedThreads =  1,
             claimableBalance = 0.0,
             solBalance = 0.0,
@@ -84,13 +89,15 @@ class HomeScreenViewModel(
             activeMiners = 0,
             poolBalance = 0.0,
             poolMultiplier = 0.0,
-            topStake = 0.0,
             isSignedUp = false,
+            isMiningSwitchOn = false,
             isProcessingSignup = false,
             isLoadingUi = true,
             secureWalletPubkey = null,
             minerPubkey = null,
             submissionResults = emptyList(),
+            powerSlider = 0f,
+            lastSubmissionAgo = System.currentTimeMillis(),
         )
     )
         private set
@@ -107,6 +114,8 @@ class HomeScreenViewModel(
         )
     )
 
+    private var appAccountId: Int = 0
+
 
 
     init {
@@ -122,11 +131,64 @@ class HomeScreenViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val appAccount = appAccountRepository.getAppAccount()
 
+
             if (appAccount != null) {
+                appAccountId = appAccount.id
                 homeUiState = homeUiState.copy(
                     isSignedUp = appAccount.isSignedUp,
                     isLoadingUi = false,
+                    powerSlider = appAccount.miningPowerLevel.toFloat(),
+                    hashRate = appAccount.hashPower,
+                    difficulty = appAccount.lastDifficulty,
+                    isMiningSwitchOn = appAccount.isMiningSwitchOn,
+                    selectedThreads = MiningWorker.calculateThreads(appAccount.miningPowerLevel)
                 )
+            }
+
+            viewModelScope.launch(Dispatchers.IO) {
+                while (true) {
+                    ensureActive()
+                    val lastSubmissionTimestamp = if (homeUiState.submissionResults.isNotEmpty()) {
+                        homeUiState.submissionResults.first().createdAt
+                    } else {
+                        System.currentTimeMillis()
+                    }
+                    val now = System.currentTimeMillis()
+
+                    val difference = (now - lastSubmissionTimestamp) / 1000
+                    homeUiState = homeUiState.copy(
+                        lastSubmissionAgo = difference
+                    )
+
+                    delay(1000)
+                }
+            }
+
+            viewModelScope.launch(Dispatchers.IO) {
+                submissionResultRepository.getAllSubmissionResultsAsFlow().collect{
+                    it?.let {
+                        if (it.isNotEmpty()) {
+                            homeUiState = homeUiState.copy(
+                                submissionResults = it,
+                                claimableBalance = homeUiState.claimableBalance + (it.first().minerEarned.toDouble() / 100000000000.0)
+                            )
+                        }
+                    }
+                }
+            }
+
+            viewModelScope.launch(Dispatchers.IO) {
+                appAccountRepository.getAppAccountAsFlow().distinctUntilChanged().collect{
+                    it?.let {
+                        if (it.isNotEmpty()) {
+                            homeUiState = homeUiState.copy(
+                                hashRate = it.first().hashPower,
+                                difficulty = it.first().lastDifficulty,
+                                isMiningSwitchOn = it.first().isMiningSwitchOn
+                            )
+                        }
+                    }
+                }
             }
 
             // Fetch miner claimable rewards every 1 minute
@@ -253,6 +315,10 @@ class HomeScreenViewModel(
                                     claimableBalance = balance,
                                     isSignedUp = true,
                                 )
+                                val appAccount = appAccountRepository.getAppAccount()
+                                if (appAccount == null) {
+                                    appAccountRepository.insertAppAccount(AppAccount(pubkey, true, false, 0, 0, 0, false))
+                                }
                             },
                             onFailure = { error ->
                                 Log.e("HomeScreenViewModel", "Error fetching wallet rewards balance", error)
@@ -333,12 +399,12 @@ class HomeScreenViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val publicKey = homeUiState.minerPubkey
             val secureWalletPubkey = homeUiState.secureWalletPubkey
-            if (publicKey != null && secureWalletPubkey != null) {
+            if (publicKey != null) {
                 val signedUp = poolRepository.signup(publicKey)
                 signedUp.fold(
                     onSuccess = {
                         Log.d("HomeScreenViewModel", "Successfully signed up!")
-                        appAccountRepository.insertAppAccount(AppAccount(publicKey, true, false, 0))
+                        appAccountRepository.insertAppAccount(AppAccount(publicKey, true, false, 0, 0, 0, false))
                         withContext(Dispatchers.Main) {
                             homeUiState = homeUiState.copy(
                                 isSignedUp = true
@@ -418,12 +484,6 @@ class HomeScreenViewModel(
         )
     }
 
-    public fun setTopStake(newTopStake: Double) {
-        homeUiState = homeUiState.copy(
-            topStake = newTopStake
-        )
-    }
-
     public fun setPoolMultiplier(newPoolMultiplier: Double) {
         homeUiState = homeUiState.copy(
             poolMultiplier = newPoolMultiplier
@@ -454,6 +514,20 @@ class HomeScreenViewModel(
                 }
             }
         }
+    }
+
+    fun setIsMiningSwitchOn(newValue: Boolean) {
+        appAccountRepository.updateIsMiningSwitchOn(newValue, appAccountId)
+    }
+
+    fun setMiningPowerLevel(level: Int) {
+        appAccountRepository.updateMiningPowerLevel(level, appAccountId)
+
+        val threads = MiningWorker.calculateThreads(level)
+        homeUiState = homeUiState.copy(
+            powerSlider = level.toFloat(),
+            selectedThreads = threads
+        )
     }
 
     companion object {

@@ -69,6 +69,23 @@ sealed class ServerMessage {
         }
     }
 
+    data class Close(val reason: String) : ServerMessage() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as Close
+
+            return reason.contentEquals(other.reason)
+        }
+
+        override fun hashCode(): Int {
+            var result = reason.toByteArray().contentHashCode()
+            return result
+        }
+
+    }
+
     data class StartMining(
         val challenge: UByteArray,
         val nonceRange: ULongRange,

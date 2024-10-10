@@ -60,10 +60,6 @@ import kotlin.math.roundToInt
 fun HomeScreen(
     homeUiState: HomeUiState,
     serviceRunning: Boolean,
-    threadCount: Int,
-    hashpower: UInt,
-    difficulty: UInt,
-    powerSlider: Float,
     setPowerSlider: (Float) -> Unit,
     onToggleMining: () -> Unit,
     onClickSignup: () -> Unit,
@@ -84,14 +80,10 @@ fun HomeScreen(
             if (homeUiState.isLoadingUi) {
                 CircularProgressIndicator()
             } else {
-                if (homeUiState.isSignedUp && homeUiState.secureWalletPubkey != null) {
+                if (homeUiState.isSignedUp) {
                     MiningScreen(
                         homeUiState = homeUiState,
                         serviceRunning = serviceRunning,
-                        threadCount = threadCount,
-                        hashpower = hashpower,
-                        difficulty = difficulty,
-                        powerSlider = powerSlider,
                         setPowerSlider = setPowerSlider,
                         onToggleMining = onToggleMining,
                         onClickClaim = onClickClaim,
@@ -118,28 +110,26 @@ fun HomeScreenPreview() {
         HomeScreen(
             HomeUiState(
                 availableThreads = 1,
-                hashRate = 0u,
-                difficulty = 0u,
+                hashRate = 0,
+                difficulty = 0,
                 selectedThreads =  1,
                 claimableBalance = 0.0,
                 solBalance = 0.0,
                 walletTokenBalance = 0.0,
                 activeMiners = 0,
                 poolBalance = 0.0,
-                topStake = 0.0,
                 poolMultiplier = 0.0,
                 isSignedUp = true,
                 isProcessingSignup = false,
                 isLoadingUi = false,
                 secureWalletPubkey = "",
                 minerPubkey = "",
-                submissionResults = emptyList()
+                submissionResults = emptyList(),
+                powerSlider = 0f,
+                isMiningSwitchOn = false,
+                lastSubmissionAgo = 0,
             ),
             serviceRunning = false,
-            threadCount = 1,
-            hashpower = 0u,
-            difficulty = 0u,
-            powerSlider = 4f,
             setPowerSlider = {},
             onToggleMining = {},
             onClickSignup = {},
@@ -155,21 +145,15 @@ fun HomeScreenPreview() {
 fun MiningScreen(
     homeUiState: HomeUiState,
     serviceRunning: Boolean,
-    threadCount: Int,
-    hashpower: UInt,
-    powerSlider: Float,
-    difficulty: UInt,
     setPowerSlider: (Float) -> Unit,
     onToggleMining: () -> Unit,
     onClickClaim: () -> Unit,
     onUpdateSelectedThreads: (Int) -> Unit,
 ) {
-    val difficulty = difficulty
     val availableThreads = homeUiState.availableThreads
     val claimableBalance = homeUiState.claimableBalance
     val activeMiners = homeUiState.activeMiners
     val poolBalance = homeUiState.poolBalance
-    val topStake = homeUiState.topStake
     val poolMultiplier = homeUiState.poolMultiplier
 
     val clipboardManager: ClipboardManager = LocalClipboardManager.current
@@ -205,18 +189,21 @@ fun MiningScreen(
                 modifier = Modifier.padding(top = 16.dp)
             )
             Text(
-                text = "Top Stake: ${String.format("%.11f", topStake)} ORE",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 16.dp)
-            )
-            Text(
                 text = "Pool Multiplier: ${String.format("%.2f", poolMultiplier)}x",
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 16.dp, bottom = 16.dp)
             )
 
-            Text(text = "Hashpower: $hashpower", modifier = Modifier.padding(bottom = 8.dp))
-            Text(text = "Difficulty: $difficulty")
+            Text(text = "Hashpower: ${homeUiState.hashRate}", modifier = Modifier.padding(bottom = 8.dp))
+            Text(text = "Difficulty: ${homeUiState.difficulty}")
+
+            val lastSubmissionTimestamp = if (homeUiState.submissionResults.isNotEmpty()) {
+                homeUiState.submissionResults.first().createdAt
+            } else {
+                0
+            }
+
+            Text(text = "Last Submission: ${homeUiState.lastSubmissionAgo}s ago")
 
             // Thread count selector
             Column(
@@ -230,7 +217,7 @@ fun MiningScreen(
                         text = "Mining Power:",
                         style = MaterialTheme.typography.bodyLarge,
                     )
-                    if (powerSlider >= 3) {
+                    if (homeUiState.powerSlider >= 3) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -246,7 +233,7 @@ fun MiningScreen(
                                 Text(
                                     text = "Warning: High power usage can degrade device!",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (powerSlider == 3f) Color.Yellow else Color.Red,
+                                    color = if (homeUiState.powerSlider == 3f) Color.Yellow else Color.Red,
                                 )
                             }
                         }
@@ -254,8 +241,7 @@ fun MiningScreen(
                 }
 
                 Slider(
-                    value = powerSlider,
-                    enabled = serviceRunning,
+                    value = homeUiState.powerSlider,
                     onValueChange = { newValue ->
                         setPowerSlider(newValue)
                         val newThreadCount = newValue.roundToInt()
@@ -264,8 +250,8 @@ fun MiningScreen(
                     steps = 3,
                     valueRange = 0f..4f,
                     colors = SliderDefaults.colors(
-                        thumbColor = lerp(Color.Green, Color.Red, powerSlider / 4f),
-                        activeTrackColor = lerp(Color.Green, Color.Red, powerSlider / 4f)
+                        thumbColor = lerp(Color.Green, Color.Red, homeUiState.powerSlider / 4f),
+                        activeTrackColor = lerp(Color.Green, Color.Red, homeUiState.powerSlider / 4f)
                     )
                 )
 
@@ -289,7 +275,7 @@ fun MiningScreen(
                 }
                 
                 Text(
-                    text = "Threads: $threadCount / $availableThreads",
+                    text = "Threads: ${homeUiState.selectedThreads} / $availableThreads",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 8.dp)
                 )
@@ -377,7 +363,7 @@ fun SignUpScreen(
 ) {
     Text("Sol Balance: ${homeUiState.solBalance}")
 
-    if (!homeUiState.isSignedUp && homeUiState.secureWalletPubkey != null) {
+    if (!homeUiState.isSignedUp) {
         Button(
             onClick = onClickSignUp,
             enabled = !homeUiState.isProcessingSignup,

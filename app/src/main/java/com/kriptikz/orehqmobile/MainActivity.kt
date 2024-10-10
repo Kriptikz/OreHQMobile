@@ -47,9 +47,6 @@ class MainActivity : ComponentActivity() {
     private var serviceBoundState by mutableStateOf(false)
 
     private var powerSlider by mutableStateOf(0f)
-    private var threadCount by mutableStateOf<Int>(1)
-    private var hashpower by mutableStateOf<UInt>(0u)
-    private var difficulty by mutableStateOf<UInt>(0u)
 
     private val workManager = WorkManager.getInstance(application)
 
@@ -112,6 +109,7 @@ class MainActivity : ComponentActivity() {
 
 
 
+
         val keypairRepository = KeypairRepository(this);
 
         val hasEncryptedKeypair = keypairRepository.encryptedKeypairExists();
@@ -119,26 +117,25 @@ class MainActivity : ComponentActivity() {
         val sender = ActivityResultSender(this)
 
         homeScreenViewModel = ViewModelProvider(this, HomeScreenViewModel.Factory)[HomeScreenViewModel::class.java]
+        homeScreenViewModel.setIsMiningSwitchOn(serviceBoundState)
 
         setContent {
             OreHQMobileTheme(true) {
                 OreHQMobileApp(
                     sender,
                     hasEncryptedKeypair,
-                    threadCount = threadCount,
-                    hashpower = hashpower,
-                    difficulty = difficulty,
-                    powerSlider = powerSlider,
                     setPowerSlider = ::onSetPowerSlider,
-                    oreHQMobileService,
                     onClickService = ::onStartOrStopForegroundServiceClick,
-                    serviceRunning = serviceBoundState,
+                    serviceRunning = homeScreenViewModel.homeUiState.isMiningSwitchOn,
                     homeScreenViewModel
                 )
             }
         }
 
         checkAndRequestNotificationPermission()
+        if (serviceBoundState) {
+            startForegroundService()
+        }
         tryToBindToServiceIfRunning()
     }
 
@@ -170,24 +167,17 @@ class MainActivity : ComponentActivity() {
 
     private fun onStartOrStopForegroundServiceClick() {
         if (serviceBoundState) {
+            homeScreenViewModel.setIsMiningSwitchOn(false)
             workManager.cancelAllWorkByTag("MiningWorker")
             // service is already running, stop it
             oreHQMobileService?.stopForegroundService()
             serviceBoundState = false
         } else {
-//            val miningRequest = PeriodicWorkRequestBuilder<MiningWorker>(Duration.ofMinutes(10))
-//                .addTag("MiningWorker")
-//                .build()
-//
-//            workManager.enqueueUniquePeriodicWork(
-//                "MiningWorker",
-//                ExistingPeriodicWorkPolicy.KEEP,
-//                miningRequest
-//            )
+            homeScreenViewModel.setIsMiningSwitchOn(true)
             startForegroundService()
             val miningRequest = OneTimeWorkRequestBuilder<MiningWorker>()
                 .addTag("MiningWorker")
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, Duration.ofMillis(5000))
                 .build()
 
             workManager.beginUniqueWork(
@@ -221,31 +211,9 @@ class MainActivity : ComponentActivity() {
 
     private fun onServiceConnected() {
         lifecycleScope.launch {
-            oreHQMobileService?.threadCount?.collectLatest { it ->
-                threadCount = it
-            }
-        }
-        lifecycleScope.launch {
-            oreHQMobileService?.hashpower?.collectLatest { it ->
-                hashpower = it
-            }
-        }
-        lifecycleScope.launch {
-            oreHQMobileService?.difficulty?.collectLatest { it ->
-                difficulty = it
-            }
-        }
-        lifecycleScope.launch {
             oreHQMobileService?.poolBalance?.collectLatest { it ->
                 if (it > 0) {
                     homeScreenViewModel.setPoolbalance(it)
-                }
-            }
-        }
-        lifecycleScope.launch {
-            oreHQMobileService?.topStake?.collectLatest { it ->
-                if (it > 0) {
-                    homeScreenViewModel.setTopStake(it)
                 }
             }
         }

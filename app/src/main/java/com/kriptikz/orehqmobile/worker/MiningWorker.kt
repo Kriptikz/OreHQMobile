@@ -1,7 +1,6 @@
 package com.kriptikz.orehqmobile.worker
 
 import android.content.Context
-import android.os.PowerManager
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -17,24 +16,16 @@ import com.kriptikz.orehqmobile.data.repositories.IPoolRepository
 import com.kriptikz.orehqmobile.data.repositories.KeypairRepository
 import com.kriptikz.orehqmobile.data.repositories.PoolRepository
 import com.kriptikz.orehqmobile.data.repositories.SubmissionResultRepository
-import com.kriptikz.orehqmobile.notification.NotificationsHelper
-import com.kriptikz.orehqmobile.service.OreHQMobileForegroundService
-import com.kriptikz.orehqmobile.service.OreHQMobileForegroundService.Companion
 import io.ktor.client.statement.bodyAsText
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import uniffi.orehqmobileffi.DxSolution
+import java.util.UUID
 import kotlin.math.pow
 
 class MiningWorker(
@@ -49,30 +40,34 @@ class MiningWorker(
     private val appAccountDao = appDb.appAccountDao()
     private var appAccountRepository = AppAccountRepository(appAccountDao)
 
+    private val workId = UUID.randomUUID()
+
+    private var lastSubmissionResultAt = System.currentTimeMillis()
+
 
     private var isWebsocketConnected = false
+
+    // keepMining: changed to false when websocket message sender fails so connection will be reestablished
     private var keepMining = true
+
     private var pubkey: String? = null
 
-    private val _threadCount = MutableStateFlow<Int>(6)
-    var threadCount: StateFlow<Int> = _threadCount
-
-    private val _hashpower = MutableStateFlow<UInt>(0u)
-    var hashpower: StateFlow<UInt> = _hashpower
-
-    private val _difficulty = MutableStateFlow<UInt>(0u)
-    var difficulty: StateFlow<UInt> = _difficulty
 
     override suspend fun doWork(): Result = coroutineScope{
+        Log.d(TAG, "$workId - Starting doWork()")
         val appAccount = appAccountRepository.getAppAccount()
         try {
-            appAccountRepository.updateIsMining(true, appAccount.id)
+            if (appAccount != null) {
+                appAccountRepository.updateIsMining(true, appAccount.id)
 
-            connectToWebsocket()
-            appAccountRepository.updateIsMining(false, appAccount.id)
+                connectToWebsocket()
+                appAccountRepository.updateIsMining(false, appAccount.id)
+            }
             return@coroutineScope Result.success()
         } catch(e: Exception) {
-            appAccountRepository.updateIsMining(false, appAccount.id)
+            if (appAccount != null) {
+                appAccountRepository.updateIsMining(false, appAccount.id)
+            }
             return@coroutineScope Result.retry()
         }
     }
@@ -80,13 +75,31 @@ class MiningWorker(
     private suspend fun connectToWebsocket() = coroutineScope {
         if (!isWebsocketConnected) {
             isWebsocketConnected = true
+            launch(Dispatchers.IO) {
+                while (true) {
+                    ensureActive()
+                    val now = System.currentTimeMillis()
+                    val diff = (now - lastSubmissionResultAt) / 1000
+                    if (diff > 120) {
+                        Log.e(TAG, "Last submission result over 120 seconds ago")
+                        poolRepository.disconnectWebsocket()
+                        break;
+                    }
+                    delay(5_000)
+                }
+            }
             async(Dispatchers.IO) {
                 while (true) {
                     ensureActive()
+                    val appAccount = appAccountRepository.getAppAccount() ?: break
+
+                    if (!appAccount.isMiningSwitchOn) {
+                        break
+                    }
                     val result = poolRepository.fetchTimestamp()
                     result.fold(
                         onSuccess = { timestamp ->
-                            Log.d(TAG, "Fetched timestamp: $timestamp")
+                            Log.d(TAG, "$workId - Fetched timestamp: $timestamp")
                             val tsBytes = timestamp.toLittleEndianByteArray()
 
                             val sig = keypairRepository.signMessage(tsBytes)?.signature
@@ -99,7 +112,7 @@ class MiningWorker(
                             if (pk != null && sig != null) {
                                 try {
                                     isWebsocketConnected = true
-                                    Log.d(TAG, "Connecting to websocket...")
+                                    Log.d(TAG, "$workId - Connecting to websocket...")
                                     poolRepository.connectWebSocket(
                                         timestamp,
                                         Base58.encodeToString(sig),
@@ -112,16 +125,24 @@ class MiningWorker(
                                         // Handle incoming WebSocket data
                                         Log.d(
                                             TAG,
-                                            "Received WebSocket data: $serverMessage"
+                                            "$workId - Received WebSocket data: $serverMessage"
                                         )
                                         // Process the data as needed
                                         when (serverMessage) {
-                                            is ServerMessage.StartMining -> handleStartMining(
-                                                serverMessage
-                                            )
+                                            is ServerMessage.StartMining -> {
+                                                launch(Dispatchers.IO) {
+                                                    handleStartMining(
+                                                        serverMessage
+                                                    )
+                                                }
+                                            }
 
                                             is ServerMessage.PoolSubmissionResult -> {
                                                 handlePoolSubmissionResult(serverMessage)
+                                            }
+
+                                            is ServerMessage.Close -> {
+                                                return@collect
                                             }
                                         }
                                     }
@@ -147,21 +168,21 @@ class MiningWorker(
                                     }
                                 }
 
-                                Log.d(TAG, "Websocket connection closed")
+                                Log.d(TAG, "$workId - Websocket connection closed")
 
 
                                 isWebsocketConnected = false
                             } else {
-                                Log.e(TAG, "pk or sig is null")
+                                Log.e(TAG, "$workId - pk or sig is null")
                             }
                         },
                         onFailure = { error ->
                             isWebsocketConnected = false
-                            Log.e(TAG, "Error fetching timestamp", error)
+                            Log.e(TAG, "$workId - Error fetching timestamp", error)
                         }
                     )
 
-                    Log.d(TAG, "Websocket disconnected. Reconnecting in 3 seconds...")
+                    Log.d(TAG, "$workId - Websocket disconnected. Reconnecting in 3 seconds...")
                     delay(3000)
                 }
             }
@@ -170,8 +191,10 @@ class MiningWorker(
 
     private suspend fun handleStartMining(startMining: ServerMessage.StartMining) = coroutineScope {
         Log.d(
-            TAG, "Received StartMining: hash=${Base64.encodeToString(startMining.challenge.toByteArray())}, " +
+            TAG, "$workId - Received StartMining: hash=${Base64.encodeToString(startMining.challenge.toByteArray())}, " +
                 "nonceRange=${startMining.nonceRange}, cutoff=${startMining.cutoff}")
+
+        lastSubmissionResultAt = System.currentTimeMillis()
         launch(Dispatchers.IO) {
             try {
                 val challenge: List<UByte> = startMining.challenge.toList()
@@ -183,13 +206,21 @@ class MiningWorker(
 
                 var bestDifficulty = 0u
 
-                while(keepMining) {
+                while(true) {
                     ensureActive()
                     val startTime = System.nanoTime()
-                    Log.d(TAG, "Seconds of run time: $secondsOfRuntime")
+                    val appAccount = appAccountRepository.getAppAccount()!!
+                    val threads = calculateThreads(appAccount.miningPowerLevel)
+
+                    if (!appAccount.isMiningSwitchOn) {
+                        keepMining = false
+                        poolRepository.disconnectWebsocket()
+                        break
+                    }
+
                     val maxBatchRuntime = 10uL // 10 seconds
                     val currentBatchMaxRuntime = minOf(secondsOfRuntime, maxBatchRuntime)
-                    val jobs = List(_threadCount.value) {
+                    val jobs = List(threads) {
                         val nonceForThisJob = currentNonce
                         currentNonce += noncesPerThread
                         async(Dispatchers.Default) {
@@ -209,26 +240,29 @@ class MiningWorker(
                     if (secondsOfRuntime >= elapsedTimeSeconds.toUInt()) {
                         secondsOfRuntime -= elapsedTimeSeconds.toUInt()
                     }
-                    val newHashrate = (totalNoncesChecked.toDouble() / elapsedTimeSeconds).toUInt()
+                    val newHashrate = (totalNoncesChecked.toDouble() / elapsedTimeSeconds).toInt()
 
                     val bestResult = results.maxByOrNull { it.difficulty }
                     if (bestResult != null) {
                         if (bestResult.difficulty > bestDifficulty) {
                             bestDifficulty = bestResult.difficulty
                             bestResult.let { solution ->
-                                Log.d(TAG, "Send submission with diff: ${solution.difficulty}")
+                                Log.d(TAG, "$workId - Send submission with diff: ${solution.difficulty}")
                                 sendSubmissionMessage(solution)
                             }
                         }
                     }
 
-                    Log.d(TAG, "Hashpower: $newHashrate")
-
-                    withContext(Dispatchers.Main) {
-                        _hashpower.value = newHashrate
-                        _difficulty.value = bestDifficulty
-                        //NotificationsHelper.updateNotification(this@OreHQMobileForegroundService, NOTIFICATION_ID, _threadCount.value, _hashpower.value, _difficulty.value)
+                    val appAccountAfter = appAccountRepository.getAppAccount()!!
+                    if (!appAccountAfter.isMiningSwitchOn) {
+                        keepMining = false
+                        poolRepository.disconnectWebsocket()
+                        break
                     }
+
+                    Log.d(TAG, "$workId - Hashpower: $newHashrate")
+                    appAccountRepository.updateHashpower(newHashrate, appAccount.id)
+                    appAccountRepository.updateLastDifficulty(bestDifficulty.toInt(), appAccount.id)
 
                     if (secondsOfRuntime <= 2u) {
                         break;
@@ -240,29 +274,24 @@ class MiningWorker(
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-//                Toast.makeText(
-//                    this@OreHQMobileForegroundService,
-//                    "Mining Interval Failed!",
-//                    Toast.LENGTH_SHORT
-//                ).show()
             }
         }
     }
 
     private fun handlePoolSubmissionResult(poolSubmissionResult: ServerMessage.PoolSubmissionResult) {
-        Log.d(TAG, "Received pool submission result:")
-        Log.d(TAG, "Difficulty: ${poolSubmissionResult.difficulty}")
-        Log.d(TAG, "Difficulty Int: ${poolSubmissionResult.difficulty.toInt()}")
-        Log.d(TAG, "Total Balance: ${"%.11f".format(poolSubmissionResult.totalBalance)}")
-        Log.d(TAG, "Total Rewards: ${"%.11f".format(poolSubmissionResult.totalRewards)}")
-        Log.d(TAG, "Top Stake: ${"%.11f".format(poolSubmissionResult.topStake)}")
-        Log.d(TAG, "Multiplier: ${"%.11f".format(poolSubmissionResult.multiplier)}")
-        Log.d(TAG, "Active Miners: ${poolSubmissionResult.activeMiners}")
-        Log.d(TAG, "Challenge: ${poolSubmissionResult.challenge.joinToString(", ")}")
-        Log.d(TAG, "Best Nonce: ${poolSubmissionResult.bestNonce}")
-        Log.d(TAG, "Miner Supplied Difficulty: ${poolSubmissionResult.minerSuppliedDifficulty}")
-        Log.d(TAG, "Miner Earned Rewards: ${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}")
-        Log.d(TAG, "Miner Percentage: ${"%.11f".format(poolSubmissionResult.minerPercentage)}")
+        Log.d(TAG, "$workId - Received pool submission result:")
+        Log.d(TAG, "$workId - Difficulty: ${poolSubmissionResult.difficulty}")
+        Log.d(TAG, "$workId - Difficulty Int: ${poolSubmissionResult.difficulty.toInt()}")
+        Log.d(TAG, "$workId - Total Balance: ${"%.11f".format(poolSubmissionResult.totalBalance)}")
+        Log.d(TAG, "$workId - Total Rewards: ${"%.11f".format(poolSubmissionResult.totalRewards)}")
+        Log.d(TAG, "$workId - Top Stake: ${"%.11f".format(poolSubmissionResult.topStake)}")
+        Log.d(TAG, "$workId - Multiplier: ${"%.11f".format(poolSubmissionResult.multiplier)}")
+        Log.d(TAG, "$workId - Active Miners: ${poolSubmissionResult.activeMiners}")
+        Log.d(TAG, "$workId - Challenge: ${poolSubmissionResult.challenge.joinToString(", ")}")
+        Log.d(TAG, "$workId - Best Nonce: ${poolSubmissionResult.bestNonce}")
+        Log.d(TAG, "$workId - Miner Supplied Difficulty: ${poolSubmissionResult.minerSuppliedDifficulty}")
+        Log.d(TAG, "$workId - Miner Earned Rewards: ${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}")
+        Log.d(TAG, "$workId - Miner Percentage: ${"%.11f".format(poolSubmissionResult.minerPercentage)}")
 
 //        _poolBalance.value = poolSubmissionResult.totalBalance
 //        _poolMultiplier.value = poolSubmissionResult.multiplier
@@ -280,8 +309,6 @@ class MiningWorker(
             poolSubmissionResult.minerSuppliedDifficulty.toInt(),
             earnings,
         ))
-
-        //Toast.makeText(this@OreHQMobileForegroundService, "${"%.11f".format(poolSubmissionResult.minerEarnedRewards)}", Toast.LENGTH_LONG)
     }
 
     private suspend fun sendReadyMessage() = coroutineScope {
@@ -300,9 +327,9 @@ class MiningWorker(
                 }
 
                 poolRepository.sendWebSocketMessage(binData)
-                Log.d(TAG, "Sent Ready message")
+                Log.d(TAG, "$workId - Sent Ready message")
             } catch (e: Exception) {
-                Log.e(TAG, "Error sending Ready message", e)
+                Log.e(TAG, "$workId - Error sending Ready message", e)
                 keepMining = false
                 poolRepository.disconnectWebsocket()
             }
@@ -334,9 +361,9 @@ class MiningWorker(
                 }
 
                 poolRepository.sendWebSocketMessage(binData)
-                Log.d(TAG, "Sent BestSolution message")
+                Log.d(TAG, "$workId - Sent BestSolution message")
             } catch (e: Exception) {
-                Log.e(TAG, "Error sending BestSolution message", e)
+                Log.e(TAG, "$workId - Error sending BestSolution message", e)
                 keepMining = false
                 poolRepository.disconnectWebsocket()
             }
@@ -349,5 +376,31 @@ class MiningWorker(
 
     companion object {
         private const val TAG = "MiningWorker"
+        private val availableThreads = Runtime.getRuntime().availableProcessors()
+
+        fun calculateThreads(powerLevel: Int): Int {
+            val newThreadsCount = when (powerLevel) {
+                0 -> {
+                    1
+                }
+                1 -> {
+                    availableThreads / 3
+                }
+                2 -> {
+                    availableThreads / 2
+                }
+                3 -> {
+                    availableThreads - (availableThreads / 3)
+                }
+                4 -> {
+                    availableThreads
+                }
+                else -> {
+                    availableThreads
+                }
+            }
+
+            return newThreadsCount
+        }
     }
 }
