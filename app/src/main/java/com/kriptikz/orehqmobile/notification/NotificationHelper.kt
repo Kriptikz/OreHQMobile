@@ -30,7 +30,7 @@ internal object NotificationsHelper {
     fun buildNotification(context: Context, threads: Int, hashpower: UInt, difficulty: UInt): Notification {
         return NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
             .setContentTitle(context.getString(R.string.foreground_service_notification_title))
-            .setContentText("Mining")
+            .setContentText("$threads Thread(s), $hashpower H/s, Latest Diff: $difficulty")
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
