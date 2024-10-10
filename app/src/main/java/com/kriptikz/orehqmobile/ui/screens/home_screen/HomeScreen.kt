@@ -88,6 +88,7 @@ fun HomeScreen(
                         onToggleMining = onToggleMining,
                         onClickClaim = onClickClaim,
                         onUpdateSelectedThreads = onUpdateSelectedThreads,
+                        onClickConnectWallet = onClickConnectWallet
                     )
                 } else {
                     SignUpScreen(
@@ -149,8 +150,10 @@ fun MiningScreen(
     onToggleMining: () -> Unit,
     onClickClaim: () -> Unit,
     onUpdateSelectedThreads: (Int) -> Unit,
+    onClickConnectWallet: () -> Unit,
 ) {
     val availableThreads = homeUiState.availableThreads
+    val oreBalance = homeUiState.walletTokenBalance
     val claimableBalance = homeUiState.claimableBalance
     val activeMiners = homeUiState.activeMiners
     val poolBalance = homeUiState.poolBalance
@@ -300,12 +303,30 @@ fun MiningScreen(
             if (!minimumBalanceReached) {
                 Text("Minimum claim amount is 0.005", style = MaterialTheme.typography.labelSmall)
             }
-            Button(
-                onClick = onClickClaim,
-                enabled = minimumBalanceReached,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Claim All")
+
+            if (oreBalance == null) {
+                Text("-0.004 first claim deduction.", style = MaterialTheme.typography.labelSmall, color = Color.Red)
+                if (minimumBalanceReached) {
+                    Text("Actual Claim Amount: ${claimableBalance - 0.004}", style = MaterialTheme.typography.labelLarge, color = Color.Green)
+                }
+            }
+
+            if (homeUiState.secureWalletPubkey == null) {
+                Button(
+                    onClick = onClickConnectWallet,
+                    enabled = minimumBalanceReached,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Claim All")
+                }
+            } else {
+                Button(
+                    onClick = onClickClaim,
+                    enabled = minimumBalanceReached,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Claim All")
+                }
             }
 
             Row(
@@ -316,7 +337,7 @@ fun MiningScreen(
             ) {
                 Text(text = "Earned")
                 Text(text = "Diff")
-                Text(text = "Date")
+                Text(text = "Time")
             }
             LazyColumn(
                 modifier = Modifier
@@ -347,7 +368,7 @@ fun SubmissionResultItem(result: SubmissionResult) {
         //get current date from ts
         calendar.timeInMillis = result.createdAt
         //return formatted date
-        val date = android.text.format.DateFormat.format("dd-MM-yy-HH:mm:ss", calendar).toString()
+        val date = android.text.format.DateFormat.format("HH:mm:ss", calendar).toString()
         Text(text = "${"%.11f".format(earnings)}", style = MaterialTheme.typography.bodyLarge)
         Text(text = "${result.minerDifficulty}", style = MaterialTheme.typography.bodyLarge)
         Text(text = "$date", style = MaterialTheme.typography.bodySmall)
