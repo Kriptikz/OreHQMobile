@@ -80,7 +80,7 @@ fun HomeScreen(
             if (homeUiState.isLoadingUi) {
                 CircularProgressIndicator()
             } else {
-                if (homeUiState.isSignedUp) {
+                if (homeUiState.isSignedUp && homeUiState.secureWalletPubkey != null) {
                     MiningScreen(
                         homeUiState = homeUiState,
                         serviceRunning = serviceRunning,
@@ -363,7 +363,7 @@ fun SignUpScreen(
 ) {
     Text("Sol Balance: ${homeUiState.solBalance}")
 
-    if (!homeUiState.isSignedUp) {
+    if (!homeUiState.isSignedUp && homeUiState.secureWalletPubkey != null) {
         Button(
             onClick = onClickSignUp,
             enabled = !homeUiState.isProcessingSignup,
