@@ -4,6 +4,8 @@ import android.util.Log
 import com.kriptikz.orehqmobile.data.models.ServerMessage
 import com.funkatronics.encoders.Base64
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.wss
@@ -23,6 +25,7 @@ import io.ktor.websocket.readBytes
 import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 
 interface IPoolRepository {
     suspend fun connectWebSocket(
@@ -79,17 +82,30 @@ class PoolRepository : IPoolRepository {
             request = {
                 header(HttpHeaders.Host, HOST_URL)
                 header(HttpHeaders.Authorization, "Basic $auth")
-            }
+            },
+
         ) {
             webSocketSession = this
             onConnectionCallback?.invoke()
             for (frame in incoming) {
-                if (frame is Frame.Text) {
-                    Log.d("PoolRepository", "Got Text: ${frame.readText()}")
-                }
-                if (frame is Frame.Binary) {
-                    val message = ServerMessage.fromUByteArray(frame.readBytes().toUByteArray())
-                    message?.let { emit(it) }
+                when (frame) {
+                    is Frame.Binary -> {
+                        val message = ServerMessage.fromUByteArray(frame.readBytes().toUByteArray())
+                        message?.let { emit(it) }
+                    }
+                    is Frame.Text -> {
+                        Log.d("PoolRepository", "Got Text: ${frame.readText()}")
+
+                    }
+                    is Frame.Close -> {
+                        //Log.d("PoolRepository", "Got close")
+                    }
+                    is Frame.Ping -> {
+                        //Log.d("PoolRepository", "Got ping")
+                    }
+                    is Frame.Pong -> {
+                        //Log.d("PoolRepository", "Got pong")
+                    }
                 }
             }
         }

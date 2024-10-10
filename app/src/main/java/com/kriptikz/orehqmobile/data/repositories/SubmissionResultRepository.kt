@@ -5,6 +5,7 @@ import androidx.lifecycle.MutableLiveData
 import com.kriptikz.orehqmobile.data.daos.SubmissionResultDao
 import com.kriptikz.orehqmobile.data.entities.SubmissionResult
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
 
 class SubmissionResultRepository(private val submissionResultDao: SubmissionResultDao) {
 
@@ -18,5 +19,9 @@ class SubmissionResultRepository(private val submissionResultDao: SubmissionResu
 
     fun getAllSubmissionResults(): List<SubmissionResult> {
         return submissionResultDao.getAllSubmissionResults()
+    }
+
+    fun getAllSubmissionResultsAsFlow(): Flow<List<SubmissionResult>> {
+        return submissionResultDao.getAllSubmissionResultsAsFlow()
     }
 }
