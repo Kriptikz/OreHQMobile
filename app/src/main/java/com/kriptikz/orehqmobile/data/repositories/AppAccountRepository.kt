@@ -49,7 +49,6 @@ class AppAccountRepository(private val appAccountDao: AppAccountDao) {
     fun updateHashpower(newHashpower: Int, id: Int) {
         coroutineScope.launch(Dispatchers.IO) {
             appAccountDao.updateHashpower(newHashpower, id)
-            Log.d(TAG, "Updated hashpower")
         }
     }
 
