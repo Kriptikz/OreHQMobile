@@ -81,6 +81,7 @@ fun HomeScreen(
                 CircularProgressIndicator()
             } else {
                 if (homeUiState.isSignedUp && homeUiState.secureWalletPubkey != null) {
+                if (homeUiState.isSignedUp) {// && homeUiState.secureWalletPubkey != null) {
                     MiningScreen(
                         homeUiState = homeUiState,
                         serviceRunning = serviceRunning,
@@ -230,7 +231,9 @@ fun MiningScreen(
                                 tint = Color.Yellow
                             )
                             Box(
-                                Modifier.height(60.dp).padding(start = 4.dp),
+                                Modifier
+                                    .height(60.dp)
+                                    .padding(start = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -317,7 +320,7 @@ fun MiningScreen(
                     enabled = minimumBalanceReached,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Claim All")
+                    Text("Connect")
                 }
             } else {
                 Button(
@@ -384,7 +387,7 @@ fun SignUpScreen(
 ) {
     Text("Sol Balance: ${homeUiState.solBalance}")
 
-    if (!homeUiState.isSignedUp && homeUiState.secureWalletPubkey != null) {
+    if (!homeUiState.isSignedUp) {// && homeUiState.secureWalletPubkey != null) {
         Button(
             onClick = onClickSignUp,
             enabled = !homeUiState.isProcessingSignup,
