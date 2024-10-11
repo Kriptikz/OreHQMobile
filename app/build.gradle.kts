@@ -13,8 +13,8 @@ android {
         applicationId = "com.kriptikz.orehqmobile"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -101,6 +101,7 @@ dependencies {
     // Room
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
     //annotationProcessor("androidx.room:room-compiler:$room_version")
 
     kapt("androidx.room:room-compiler:$room_version")
