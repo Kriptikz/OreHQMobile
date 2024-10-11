@@ -46,7 +46,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.BaselineShift
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
 import com.kriptikz.orehqmobile.data.daos.SubmissionResultDao
 import com.kriptikz.orehqmobile.data.entities.SubmissionResult
 import com.kriptikz.orehqmobile.ui.screens.OreHQMobileScaffold
@@ -80,7 +85,6 @@ fun HomeScreen(
             if (homeUiState.isLoadingUi) {
                 CircularProgressIndicator()
             } else {
-                if (homeUiState.isSignedUp && homeUiState.secureWalletPubkey != null) {
                 if (homeUiState.isSignedUp) {// && homeUiState.secureWalletPubkey != null) {
                     MiningScreen(
                         homeUiState = homeUiState,
@@ -162,6 +166,7 @@ fun MiningScreen(
 
     val clipboardManager: ClipboardManager = LocalClipboardManager.current
     var isPublicKeyCopied by remember { mutableStateOf(false) }
+    var isClaimPublicKeyCopied by remember { mutableStateOf(false) }
 
     val screenHeight = LocalConfiguration.current.screenHeightDp
     val listHeight = screenHeight / 3
@@ -178,6 +183,7 @@ fun MiningScreen(
                 it
             } ?: "Error"
             PublicKeySection(
+                text = "Miner Pubkey: ",
                 pubkey = pubkeyString,
                 onCopyPubkey = {
                     clipboardManager.setText(AnnotatedString(pubkeyString))
@@ -307,22 +313,31 @@ fun MiningScreen(
                 Text("Minimum claim amount is 0.005", style = MaterialTheme.typography.labelSmall)
             }
 
-            if (oreBalance == null) {
-                Text("-0.004 first claim deduction.", style = MaterialTheme.typography.labelSmall, color = Color.Red)
-                if (minimumBalanceReached) {
-                    Text("Actual Claim Amount: ${claimableBalance - 0.004}", style = MaterialTheme.typography.labelLarge, color = Color.Green)
-                }
-            }
 
             if (homeUiState.secureWalletPubkey == null) {
                 Button(
                     onClick = onClickConnectWallet,
-                    enabled = minimumBalanceReached,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Connect")
                 }
             } else {
+                if (oreBalance == null) {
+                    Text("-0.004 first claim deduction.", style = MaterialTheme.typography.labelSmall, color = Color.Red)
+                    if (minimumBalanceReached) {
+                        Text("Actual Claim Amount: ${claimableBalance - 0.004}", style = MaterialTheme.typography.labelLarge, color = Color.Green)
+                    }
+                }
+                val claimPubkey = homeUiState.secureWalletPubkey ?: "Not Connected"
+                PublicKeySection(
+                    text = "Claim Pubkey: ",
+                    pubkey = claimPubkey,
+                    onCopyPubkey = {
+                        clipboardManager.setText(AnnotatedString(claimPubkey))
+                        isClaimPublicKeyCopied = true
+                    },
+                    isPublicKeyCopied = isClaimPublicKeyCopied
+                )
                 Button(
                     onClick = onClickClaim,
                     enabled = minimumBalanceReached,
@@ -372,9 +387,31 @@ fun SubmissionResultItem(result: SubmissionResult) {
         calendar.timeInMillis = result.createdAt
         //return formatted date
         val date = android.text.format.DateFormat.format("HH:mm:ss", calendar).toString()
-        Text(text = "${"%.11f".format(earnings)}", style = MaterialTheme.typography.bodyLarge)
-        Text(text = "${result.minerDifficulty}", style = MaterialTheme.typography.bodyLarge)
-        Text(text = "$date", style = MaterialTheme.typography.bodySmall)
+        val formattedEarnings = "%.11f".format(earnings)
+        val (integerPart, fractionalPart) = formattedEarnings.split(".")
+        val leadingZeros = fractionalPart.takeWhile { it == '0' }
+        val remainingFraction = fractionalPart.dropWhile { it == '0' }
+        val mod = Modifier.fillMaxWidth(0.33f)
+
+    Box(modifier = mod, contentAlignment = Alignment.CenterEnd) {
+            Text(
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 8.sp)) {
+                        append("$integerPart.$leadingZeros")
+                    }
+                    append(remainingFraction)
+                },
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+
+        Box(modifier = mod) {
+            Text(text = "${result.minerDifficulty}", style = MaterialTheme.typography.bodyLarge)
+        }
+
+        Box(modifier = mod) {
+            Text(text = "$date", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -416,10 +453,10 @@ fun SignUpScreen(
 
 
 @Composable
-fun PublicKeySection(pubkey: String, onCopyPubkey: () -> Unit, isPublicKeyCopied: Boolean) {
+fun PublicKeySection(text: String, pubkey: String, onCopyPubkey: () -> Unit, isPublicKeyCopied: Boolean) {
     Row {
         Text(
-            text = "Miner Pubkey: ",
+            text = "$text",
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Surface(
