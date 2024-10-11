@@ -218,7 +218,7 @@ class MiningWorker(
                         break
                     }
 
-                    val maxBatchRuntime = 10uL // 10 seconds
+                    val maxBatchRuntime = 3uL // 10 seconds
                     val currentBatchMaxRuntime = minOf(secondsOfRuntime, maxBatchRuntime)
                     val jobs = List(threads) {
                         val nonceForThisJob = currentNonce
